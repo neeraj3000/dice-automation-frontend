@@ -21,7 +21,7 @@ Features a modern Material UI (MUI) dashboard with dark mode styling, candidate 
 - npm or yarn
 
 ### 2. Configuration
-Copy .env.example to .env (defaults to backend running on http://localhost:8000/api):
+Copy .env.example to .env (defaults to backend running on http://localhost:8000):
 `ash
 cp .env.example .env
 `
