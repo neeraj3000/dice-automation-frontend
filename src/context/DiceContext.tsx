@@ -101,9 +101,9 @@ export const DiceProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Initial HTTP fetch fallback
     refreshDiceStatus(false);
 
-    // Tab focus check: when user switches back to this tab, refresh cached state
+    // Tab focus check: when user switches back from Dice tab, verify live
     const handleFocus = () => {
-      refreshDiceStatus(false);
+      refreshDiceStatus(true);
     };
     window.addEventListener('focus', handleFocus);
 
@@ -114,6 +114,18 @@ export const DiceProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
   }, [refreshDiceStatus]);
+
+  // Active auto-polling while waiting for login / session sync
+  useEffect(() => {
+    if (!isWaitingForLogin) return;
+    const interval = setInterval(async () => {
+      const status = await refreshDiceStatus(true);
+      if (status.is_connected) {
+        setIsWaitingForLogin(false);
+      }
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [isWaitingForLogin, refreshDiceStatus]);
 
   return (
     <DiceContext.Provider

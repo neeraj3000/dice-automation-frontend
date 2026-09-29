@@ -19,6 +19,10 @@ import {
   Snackbar,
   Chip,
   Collapse,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   SaveRounded as SaveIcon,
@@ -30,6 +34,10 @@ import {
   SecurityRounded as SecurityIcon,
   CloudSyncRounded as CloudSyncIcon,
   ContentPasteRounded as ContentPasteIcon,
+  BookmarkRounded as BookmarkIcon,
+  ContentCopyRounded as CopyIcon,
+  OpenInNewRounded as OpenInNewIcon,
+  CheckRounded as CheckIcon,
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useDice } from '../context/DiceContext';
@@ -79,6 +87,8 @@ export const SettingsPage: React.FC = () => {
   const [verifyingLive, setVerifyingLive] = useState(false);
   const [openingBrowser, setOpeningBrowser] = useState(false);
   const [showSessionImporter, setShowSessionImporter] = useState(false);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [copiedSnippet, setCopiedSnippet] = useState(false);
   const [cookieInput, setCookieInput] = useState('');
   const [importingCookie, setImportingCookie] = useState(false);
 
@@ -128,21 +138,38 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
+  const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+  const syncSnippetCode = `fetch('${apiBaseUrl}/settings/import-dice-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cookie_string: document.cookie }) }).then(r => r.json()).then(d => alert('✅ Dice session synced successfully! Return to your automation app.')).catch(e => alert('Sync error: ' + e));`;
+  const bookmarkletCode = `javascript:(function(){var u='${apiBaseUrl}/settings/import-dice-session';fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookie_string:document.cookie})}).then(function(r){return r.json()}).then(function(d){alert('✅ Dice session synced successfully! Return to your automation app.')}).catch(function(e){alert('Sync error: '+e)})})();`;
+
   const handleOpenDiceLogin = async () => {
-    // Open new tab immediately in the user's browser to avoid popup blockers
-    const diceWindow = window.open('https://www.dice.com/dashboard/login', '_blank');
     setOpeningBrowser(true);
     try {
       const res = await api.openDiceLogin();
-      if (res.login_url && diceWindow) {
-        diceWindow.location.href = res.login_url;
+      if (res.cloud_mode) {
+        // Cloud / Headless environment: open login tab in user's browser & show sync modal
+        window.open(res.login_url || 'https://www.dice.com/dashboard/login', '_blank');
+        setSyncModalOpen(true);
+        setToastMessage(res.message || 'Dice login tab opened. Complete sign in, then sync your session.');
+      } else {
+        // Local desktop mode: visible Playwright window is opened on user's desktop
+        setToastMessage('Visible browser opened on your desktop! Log into Dice in that window; session will sync automatically.');
       }
-      setToastMessage(res.message || 'Dice login opened in a new tab. Please complete sign in.');
     } catch {
-      setToastMessage('Opened Dice login in a new tab. Please complete sign in.');
+      // Fallback: open directly in user's browser and show sync modal
+      window.open('https://www.dice.com/dashboard/login', '_blank');
+      setSyncModalOpen(true);
+      setToastMessage('Opened Dice login tab. Follow instructions in the Sync Dialog.');
     } finally {
       setOpeningBrowser(false);
     }
+  };
+
+  const handleCopySyncSnippet = () => {
+    navigator.clipboard.writeText(syncSnippetCode);
+    setCopiedSnippet(true);
+    setToastMessage('1-Click Sync snippet copied! Paste in Dice tab console and press Enter.');
+    setTimeout(() => setCopiedSnippet(false), 3000);
   };
 
   const handleImportSession = async () => {
@@ -608,6 +635,172 @@ export const SettingsPage: React.FC = () => {
           </Box>
         )}
       </Paper>
+
+      {/* Interactive Dice Session Sync Modal */}
+      <Dialog
+        open={syncModalOpen}
+        onClose={() => setSyncModalOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        slotProps={{ paper: { sx: { borderRadius: 3, p: 1 } } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <SecurityIcon sx={{ color: '#6366f1' }} />
+          Dice Account Session Sync
+        </DialogTitle>
+        <DialogContent dividers sx={{ py: 2.5 }}>
+          {diceStatus?.is_connected ? (
+            <Alert severity="success" sx={{ mb: 2.5, borderRadius: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                Successfully Connected to Dice!
+              </Typography>
+              <Typography variant="body2">
+                Active Account: <strong>{diceStatus.username || 'Authenticated Candidate'}</strong> ({diceStatus.cookies_count || 0} cookies active).
+              </Typography>
+            </Alert>
+          ) : (
+            <Alert
+              severity="info"
+              icon={<CircularProgress size={18} sx={{ color: '#0284c7' }} />}
+              sx={{ mb: 2.5, borderRadius: 2, bgcolor: '#f0f9ff', borderColor: '#bae6fd' }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 600, color: '#0369a1' }}>
+                Waiting for sign-in... (Auto-detecting every 2s)
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#0284c7', display: 'block', mt: 0.25 }}>
+                Log in to your Dice account in the opened tab, then sync your session below.
+              </Typography>
+            </Alert>
+          )}
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1e293b', mb: 1 }}>
+            Step 1: Sign in on Dice
+          </Typography>
+          <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<OpenInNewIcon />}
+              onClick={() => window.open('https://www.dice.com/dashboard/login', '_blank')}
+              sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem' }}
+            >
+              Re-open Dice Login Tab
+            </Button>
+            <Typography variant="caption" color="text.secondary">
+              If the tab was closed or blocked
+            </Typography>
+          </Box>
+
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1e293b', mb: 1 }}>
+            Step 2: Sync Session to Cloud (Pick any method)
+          </Typography>
+
+          {/* Option A: 1-Click Bookmarklet */}
+          <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2, bgcolor: '#f8fafc' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: '#0f172a' }}>
+                Option A: 1-Click Bookmarklet (Instant)
+              </Typography>
+              <Chip label="Easiest" size="small" color="primary" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700 }} />
+            </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+              Drag this button to your browser Bookmarks Bar. When logged into Dice, just click it to sync in 1 second!
+            </Typography>
+            <Button
+              variant="contained"
+              size="small"
+              href={bookmarkletCode}
+              startIcon={<BookmarkIcon />}
+              sx={{
+                bgcolor: '#4f46e5',
+                '&:hover': { bgcolor: '#4338ca' },
+                textTransform: 'none',
+                fontWeight: 700,
+                fontSize: '0.78rem',
+                cursor: 'grab',
+              }}
+              onClick={(e) => {
+                // If clicked directly in this tab
+                e.preventDefault();
+                setToastMessage("Drag this button to your Bookmarks Bar, then click it on the Dice tab!");
+              }}
+            >
+              ⭐ Sync Dice to App (Drag to Bookmarks)
+            </Button>
+          </Paper>
+
+          {/* Option B: 1-Click Console Snippet */}
+          <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2, bgcolor: '#f8fafc' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: '#0f172a' }}>
+                Option B: Console 1-Click Snippet
+              </Typography>
+              <Chip label="Zero-install" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, bgcolor: '#ecfdf5', color: '#065f46' }} />
+            </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+              Press <code>F12</code> on the Dice tab, click Console, paste this snippet and press Enter:
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={copiedSnippet ? <CheckIcon /> : <CopyIcon />}
+              onClick={handleCopySyncSnippet}
+              sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.78rem' }}
+            >
+              {copiedSnippet ? 'Copied to Clipboard!' : 'Copy 1-Click Sync Snippet'}
+            </Button>
+          </Paper>
+
+          {/* Option C: Direct Paste */}
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: '#f8fafc' }}>
+            <Typography variant="body2" sx={{ fontWeight: 700, color: '#0f172a', mb: 0.5 }}>
+              Option C: Paste Cookie String or JSON
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+              Paste cookie string from <code>document.cookie</code> or JSON cookie export:
+            </Typography>
+            <TextField
+              fullWidth
+              multiline
+              rows={2}
+              size="small"
+              placeholder="Paste cookies here (e.g. identity=...; or JSON)"
+              value={cookieInput}
+              onChange={(e) => setCookieInput(e.target.value)}
+              sx={{ mb: 1.5, fontFamily: 'monospace', fontSize: '0.75rem' }}
+            />
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={importingCookie ? <CircularProgress size={14} color="inherit" /> : <ContentPasteIcon />}
+              disabled={importingCookie || !cookieInput.trim()}
+              onClick={handleImportSession}
+              sx={{ bgcolor: '#0f172a', textTransform: 'none', fontWeight: 700, fontSize: '0.78rem' }}
+            >
+              {importingCookie ? 'Syncing...' : 'Sync Session to Cloud'}
+            </Button>
+          </Paper>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2, display: 'flex', justifyContent: 'space-between' }}>
+          <Button
+            size="small"
+            startIcon={verifyingLive ? <CircularProgress size={14} /> : <RefreshIcon />}
+            disabled={verifyingLive}
+            onClick={handleVerifyDiceLive}
+            sx={{ textTransform: 'none', fontWeight: 600 }}
+          >
+            {verifyingLive ? 'Verifying...' : 'Check Connection Now'}
+          </Button>
+          <Button
+            variant={diceStatus?.is_connected ? "contained" : "outlined"}
+            color={diceStatus?.is_connected ? "success" : "inherit"}
+            onClick={() => setSyncModalOpen(false)}
+            sx={{ fontWeight: 700 }}
+          >
+            {diceStatus?.is_connected ? 'Done' : 'Close'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar
         open={Boolean(toastMessage)}
