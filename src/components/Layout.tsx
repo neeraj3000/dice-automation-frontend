@@ -34,6 +34,7 @@ import {
 } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { useDice } from '../context/DiceContext';
 
 const DRAWER_WIDTH = 265;
 
@@ -59,7 +60,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'checking'>('checking');
-  const [diceStatus, setDiceStatus] = useState<{ is_connected: boolean; username?: string } | null>(null);
+  const { diceStatus } = useDice();
 
   useEffect(() => {
     api.getHealth()
@@ -68,9 +69,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       })
       .catch(() => setDbStatus('error'));
 
-    api.getDiceStatus()
-      .then((status) => setDiceStatus(status))
-      .catch(() => setDiceStatus({ is_connected: false }));
+
   }, []);
 
   const handleDrawerToggle = () => {

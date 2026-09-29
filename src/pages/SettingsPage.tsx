@@ -27,9 +27,9 @@ import {
   RefreshRounded as RefreshIcon,
   CheckCircleRounded as CheckCircleIcon,
   SecurityRounded as SecurityIcon,
-  PsychologyRounded as PsychologyIcon,
 } from '@mui/icons-material';
 import { api } from '../services/api';
+import { useDice } from '../context/DiceContext';
 import type { UserProfile, AppSettings } from '../types';
 
 export const SettingsPage: React.FC = () => {
@@ -58,20 +58,21 @@ export const SettingsPage: React.FC = () => {
 
   // Settings State
   const [settings, setSettings] = useState<AppSettings>({
-    openai_api_key: '',
-    openai_model: 'gpt-4o-mini',
     max_jobs_per_search: 15,
     max_applications_per_run: 10,
     default_mode: 'PREPARE',
     headless_browser: false,
   });
 
-  const [diceStatus, setDiceStatus] = useState<{
-    is_connected: boolean;
-    username?: string;
-    cookies_count?: number;
-    last_verified?: string;
-  } | null>(null);
+  const { diceStatus, refreshDiceStatus, isWaitingForLogin, onLoginSuccess } = useDice();
+
+  useEffect(() => {
+    if (onLoginSuccess) {
+      onLoginSuccess((status) => {
+        setToastMessage(`Dice account connected successfully! Account: ${status.username || 'Active User'}`);
+      });
+    }
+  }, [onLoginSuccess]);
   const [verifyingLive, setVerifyingLive] = useState(false);
   const [openingBrowser, setOpeningBrowser] = useState(false);
 
@@ -79,14 +80,13 @@ export const SettingsPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const [profData, settsData, diceData] = await Promise.all([
+      const [profData, settsData] = await Promise.all([
         api.getProfile(),
         api.getSettings(),
-        api.getDiceStatus(),
+        refreshDiceStatus(),
       ]);
       setProfile(profData);
       setSettings(settsData);
-      setDiceStatus(diceData);
     } catch {
       setError('Failed to load settings from server.');
     } finally {
@@ -125,8 +125,8 @@ export const SettingsPage: React.FC = () => {
   const handleOpenDiceLogin = async () => {
     setOpeningBrowser(true);
     try {
-      await api.openDiceLogin();
-      setToastMessage('Browser opened! Please sign in to Dice in the opened window.');
+      const res = await api.openDiceLogin();
+      setToastMessage(res.message || 'Browser opened! Please sign in to Dice in the opened window.');
     } catch {
       setError('Failed to open browser. Please check backend logs.');
     } finally {
@@ -137,10 +137,9 @@ export const SettingsPage: React.FC = () => {
   const handleVerifyDiceLive = async () => {
     setVerifyingLive(true);
     try {
-      const res = await api.getDiceStatus(true);
-      setDiceStatus(res);
+      const res = await refreshDiceStatus(true);
       if (res.is_connected) {
-        setToastMessage(`Dice session active! Account: ${res.username || 'Active'}`);
+        setToastMessage(`Dice session active! Account: ${res.username || 'Active User'}`);
       } else {
         setError('Dice session is not connected or requires login.');
       }
@@ -351,10 +350,10 @@ export const SettingsPage: React.FC = () => {
           <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
             <Box sx={{ mb: 3 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0f172a' }}>
-                OpenAI & Browser Session Configuration
+                Automation & Browser Session Configuration
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Control LLM models, rate limits, and persistent browser automation profile.
+                Control application rate limits, automation mode, and persistent Dice browser profile.
               </Typography>
             </Box>
 
@@ -420,10 +419,19 @@ export const SettingsPage: React.FC = () => {
                 </Box>
               </Box>
 
+              {isWaitingForLogin && (
+                <Box sx={{ mb: 2, p: 1.5, borderRadius: 2, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <CircularProgress size={16} sx={{ color: '#2563eb' }} />
+                  <Typography variant="caption" sx={{ color: '#1e40af', fontWeight: 600 }}>
+                    Waiting for Dice sign-in in browser window... (Real-time detection active)
+                  </Typography>
+                </Box>
+              )}
+
               {diceStatus?.is_connected ? (
                 <Box sx={{ bgcolor: '#ffffff', p: 2, borderRadius: 2, border: '1px solid #e2e8f0' }}>
                   <Typography variant="body2" sx={{ color: '#0f172a', fontWeight: 700, mb: 0.5 }}>
-                    Active User Profile: {diceStatus.username || 'VS (Veera Sekhar)'}
+                    Active User Profile: {diceStatus.username || 'Active User'}
                   </Typography>
                   <Typography variant="caption" sx={{ color: '#64748b', display: 'block', lineHeight: 1.5 }}>
                     {diceStatus.cookies_count || 24} authenticated session cookies active in <code>data/browser_profile/</code>. 
@@ -437,39 +445,8 @@ export const SettingsPage: React.FC = () => {
               )}
             </Paper>
 
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <PsychologyIcon sx={{ color: '#6366f1' }} />
-              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0f172a' }}>
-                OpenAI Configuration
-              </Typography>
-            </Box>
-
-            <TextField
-              fullWidth
-              label="OpenAI API Key"
-              type="password"
-              size="small"
-              placeholder="sk-..."
-              value={settings.openai_api_key || ''}
-              onChange={(e) => setSettings({ ...settings, openai_api_key: e.target.value })}
-              helperText="Optional: If omitted, the platform uses intelligent local keyword heuristic matching"
-              sx={{ mb: 3 }}
-            />
-
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2.5, mb: 3 }}>
-              <FormControl size="small">
-                <InputLabel>OpenAI Model</InputLabel>
-                <Select
-                  value={settings.openai_model}
-                  label="OpenAI Model"
-                  onChange={(e) => setSettings({ ...settings, openai_model: e.target.value })}
-                >
-                  <MenuItem value="gpt-4o-mini">gpt-4o-mini (Fast, High Fidelity, Cost Efficient)</MenuItem>
-                  <MenuItem value="gpt-4o">gpt-4o (Advanced Reasoning)</MenuItem>
-                </Select>
-              </FormControl>
-
-              <FormControl size="small">
+            <Box sx={{ mb: 3 }}>
+              <FormControl size="small" fullWidth>
                 <InputLabel>Default Automation Mode</InputLabel>
                 <Select
                   value={settings.default_mode}

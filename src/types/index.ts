@@ -180,8 +180,6 @@ export interface UserProfile {
 }
 
 export interface AppSettings {
-  openai_api_key?: string;
-  openai_model: string;
   max_jobs_per_search: number;
   max_applications_per_run: number;
   default_mode: string;

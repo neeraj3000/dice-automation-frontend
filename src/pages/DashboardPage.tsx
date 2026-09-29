@@ -30,24 +30,21 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { useDice } from '../context/DiceContext';
 import type { DashboardStats } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [diceStatus, setDiceStatus] = useState<{ is_connected: boolean; username?: string } | null>(null);
+  const { diceStatus } = useDice();
   const [loading, setLoading] = useState(true);
 
   const fetchStats = async () => {
     setLoading(true);
     try {
-      const [statsData, diceData] = await Promise.all([
-        api.getDashboardStats(),
-        api.getDiceStatus(),
-      ]);
+      const statsData = await api.getDashboardStats();
       setStats(statsData);
-      setDiceStatus(diceData);
     } catch {
       // Fallback empty stats
     } finally {

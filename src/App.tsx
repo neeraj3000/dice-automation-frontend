@@ -9,6 +9,7 @@ import { JobsPage } from './pages/JobsPage';
 import { ApplicationsPage } from './pages/ApplicationsPage';
 import { ReviewQueuePage } from './pages/ReviewQueuePage';
 import { SettingsPage } from './pages/SettingsPage';
+import { DiceProvider } from './context/DiceContext';
 import './App.css';
 
 const theme = createTheme({
@@ -244,6 +245,7 @@ export const App: React.FC = () => {
   return (
     <ThemeProvider theme={theme}>
       <BrowserRouter>
+        <DiceProvider>
         <Layout>
           <Routes>
             <Route path="/" element={<DashboardPage />} />
@@ -256,6 +258,7 @@ export const App: React.FC = () => {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>
+        </DiceProvider>
       </BrowserRouter>
     </ThemeProvider>
   );
