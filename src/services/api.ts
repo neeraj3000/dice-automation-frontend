@@ -198,8 +198,18 @@ export const api = {
     return res.data;
   },
 
-  openDiceLogin: async (): Promise<{ status: string; message: string }> => {
-    const res = await apiClient.post<{ status: string; message: string }>('/settings/open-dice-login');
+  openDiceLogin: async (): Promise<{ status: string; message: string; login_url?: string; cloud_mode?: boolean }> => {
+    const res = await apiClient.post<{ status: string; message: string; login_url?: string; cloud_mode?: boolean }>('/settings/open-dice-login');
+    return res.data;
+  },
+
+  importDiceSession: async (data: { cookie_string?: string; cookies?: any[]; username?: string }): Promise<{
+    status: string;
+    message: string;
+    cookies_count?: number;
+    username?: string;
+  }> => {
+    const res = await apiClient.post('/settings/import-dice-session', data);
     return res.data;
   },
 

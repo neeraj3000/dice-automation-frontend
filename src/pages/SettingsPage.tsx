@@ -18,6 +18,7 @@ import {
   Divider,
   Snackbar,
   Chip,
+  Collapse,
 } from '@mui/material';
 import {
   SaveRounded as SaveIcon,
@@ -27,6 +28,8 @@ import {
   RefreshRounded as RefreshIcon,
   CheckCircleRounded as CheckCircleIcon,
   SecurityRounded as SecurityIcon,
+  CloudSyncRounded as CloudSyncIcon,
+  ContentPasteRounded as ContentPasteIcon,
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useDice } from '../context/DiceContext';
@@ -75,6 +78,9 @@ export const SettingsPage: React.FC = () => {
   }, [onLoginSuccess]);
   const [verifyingLive, setVerifyingLive] = useState(false);
   const [openingBrowser, setOpeningBrowser] = useState(false);
+  const [showSessionImporter, setShowSessionImporter] = useState(false);
+  const [cookieInput, setCookieInput] = useState('');
+  const [importingCookie, setImportingCookie] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -123,14 +129,54 @@ export const SettingsPage: React.FC = () => {
   };
 
   const handleOpenDiceLogin = async () => {
+    // Open new tab immediately in the user's browser to avoid popup blockers
+    const diceWindow = window.open('https://www.dice.com/dashboard/login', '_blank');
     setOpeningBrowser(true);
     try {
       const res = await api.openDiceLogin();
-      setToastMessage(res.message || 'Browser opened! Please sign in to Dice in the opened window.');
+      if (res.login_url && diceWindow) {
+        diceWindow.location.href = res.login_url;
+      }
+      setToastMessage(res.message || 'Dice login opened in a new tab. Please complete sign in.');
     } catch {
-      setError('Failed to open browser. Please check backend logs.');
+      setToastMessage('Opened Dice login in a new tab. Please complete sign in.');
     } finally {
       setOpeningBrowser(false);
+    }
+  };
+
+  const handleImportSession = async () => {
+    if (!cookieInput.trim()) {
+      setError('Please enter your Dice cookies or cookie string.');
+      return;
+    }
+    setImportingCookie(true);
+    try {
+      let parsedCookies = undefined;
+      let rawString = undefined;
+      const trimmed = cookieInput.trim();
+      if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          parsedCookies = Array.isArray(parsed) ? parsed : [parsed];
+        } catch {
+          rawString = trimmed;
+        }
+      } else {
+        rawString = trimmed;
+      }
+      const res = await api.importDiceSession({
+        cookies: parsedCookies,
+        cookie_string: rawString,
+      });
+      setToastMessage(res.message || 'Dice session cookies imported successfully!');
+      setCookieInput('');
+      setShowSessionImporter(false);
+      await refreshDiceStatus(true);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || 'Failed to import session cookies.');
+    } finally {
+      setImportingCookie(false);
     }
   };
 
@@ -429,7 +475,7 @@ export const SettingsPage: React.FC = () => {
               )}
 
               {diceStatus?.is_connected ? (
-                <Box sx={{ bgcolor: '#ffffff', p: 2, borderRadius: 2, border: '1px solid #e2e8f0' }}>
+                <Box sx={{ bgcolor: '#ffffff', p: 2, borderRadius: 2, border: '1px solid #e2e8f0', mb: 2 }}>
                   <Typography variant="body2" sx={{ color: '#0f172a', fontWeight: 700, mb: 0.5 }}>
                     Active User Profile: {diceStatus.username || 'Active User'}
                   </Typography>
@@ -439,10 +485,65 @@ export const SettingsPage: React.FC = () => {
                   </Typography>
                 </Box>
               ) : (
-                <Typography variant="body2" color="text.secondary">
-                  No active Dice session detected. Click &quot;Open Dice in Browser&quot; to sign in once.
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  No active Dice session detected. Click &quot;Open Dice in Browser&quot; to sign in in a new tab, or import your session cookies below for cloud deployments.
                 </Typography>
               )}
+
+              {/* Cloud / Headless Session Sync Accordion */}
+              <Box sx={{ pt: 1.5, borderTop: '1px dashed #cbd5e1' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Button
+                    size="small"
+                    startIcon={<CloudSyncIcon fontSize="small" />}
+                    onClick={() => setShowSessionImporter(!showSessionImporter)}
+                    sx={{ textTransform: 'none', fontSize: '0.8rem', fontWeight: 600, color: '#4f46e5' }}
+                  >
+                    {showSessionImporter ? 'Hide Cloud Session Importer' : 'Cloud / Production: Import Session Cookies'}
+                  </Button>
+                  <Typography variant="caption" sx={{ color: '#64748b' }}>
+                    For headless/remote servers (Render, Docker, AWS)
+                  </Typography>
+                </Box>
+
+                <Collapse in={showSessionImporter}>
+                  <Box sx={{ mt: 2, p: 2, bgcolor: '#ffffff', borderRadius: 2, border: '1px solid #e2e8f0' }}>
+                    <Typography variant="caption" sx={{ display: 'block', mb: 1, color: '#475569', fontWeight: 500 }}>
+                      Paste your Dice session cookie string (from Chrome DevTools or <code>document.cookie</code>) or JSON array:
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      size="small"
+                      placeholder="PASTE COOKIE STRING HERE (e.g. ds_session_id=...; or JSON cookie export)"
+                      value={cookieInput}
+                      onChange={(e) => setCookieInput(e.target.value)}
+                      sx={{ mb: 1.5, fontFamily: 'monospace', fontSize: '0.8rem' }}
+                    />
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => setShowSessionImporter(false)}
+                        sx={{ fontSize: '0.78rem' }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        startIcon={importingCookie ? <CircularProgress size={14} color="inherit" /> : <ContentPasteIcon />}
+                        disabled={importingCookie || !cookieInput.trim()}
+                        onClick={handleImportSession}
+                        sx={{ bgcolor: '#4f46e5', '&:hover': { bgcolor: '#4338ca' }, fontSize: '0.78rem', fontWeight: 700 }}
+                      >
+                        {importingCookie ? 'Importing...' : 'Sync Session to Cloud'}
+                      </Button>
+                    </Box>
+                  </Box>
+                </Collapse>
+              </Box>
             </Paper>
 
             <Box sx={{ mb: 3 }}>

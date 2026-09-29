@@ -31,6 +31,7 @@ import {
   TablePagination,
   FormControlLabel,
   Switch,
+  Tooltip,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -47,6 +48,7 @@ import {
   ArrowForward as ArrowForwardIcon,
   ErrorOutlineRounded as ErrorOutlineIcon,
   Replay as ReplayIcon,
+  Launch as LaunchIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -971,6 +973,19 @@ export const JobsPage: React.FC = () => {
                           <Button size="small" onClick={() => handleOpenDrawer(job)} sx={{ fontSize: '0.75rem' }} disabled={applyAllState.isActive && inAction}>
                             View
                           </Button>
+                          <Tooltip title="Open job on Dice in new tab">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const url = job.job_url || (job.external_job_id ? `https://www.dice.com/job-detail/${job.external_job_id}` : 'https://www.dice.com');
+                                window.open(url, '_blank');
+                              }}
+                              sx={{ color: '#64748b', '&:hover': { color: '#2563eb' } }}
+                            >
+                              <LaunchIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Tooltip>
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -1064,9 +1079,29 @@ export const JobsPage: React.FC = () => {
                   )}
                 </Box>
               </Box>
-              <IconButton size="small" onClick={() => setDrawerOpen(false)} sx={{ color: '#94a3b8' }}>
-                <CloseIcon />
-              </IconButton>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<LaunchIcon sx={{ fontSize: '14px !important' }} />}
+                  onClick={() => {
+                    const url = selectedJob.job_url || (selectedJob.external_job_id ? `https://www.dice.com/job-detail/${selectedJob.external_job_id}` : 'https://www.dice.com');
+                    window.open(url, '_blank');
+                  }}
+                  sx={{
+                    color: '#94a3b8',
+                    borderColor: '#334155',
+                    fontSize: '0.75rem',
+                    textTransform: 'none',
+                    '&:hover': { borderColor: '#64748b', color: '#ffffff', bgcolor: 'rgba(255,255,255,0.05)' },
+                  }}
+                >
+                  Open on Dice
+                </Button>
+                <IconButton size="small" onClick={() => setDrawerOpen(false)} sx={{ color: '#94a3b8' }}>
+                  <CloseIcon />
+                </IconButton>
+              </Box>
             </Box>
 
             {/* Content */}
@@ -1270,9 +1305,23 @@ export const JobsPage: React.FC = () => {
 
             {/* Footer */}
             <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Button onClick={() => setDrawerOpen(false)} color="inherit">
-                Close
-              </Button>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button onClick={() => setDrawerOpen(false)} color="inherit">
+                  Close
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<LaunchIcon sx={{ fontSize: '14px !important' }} />}
+                  onClick={() => {
+                    const url = selectedJob.application_url || selectedJob.application_wizard_url || selectedJob.job_url || (selectedJob.external_job_id ? `https://www.dice.com/job-detail/${selectedJob.external_job_id}` : 'https://www.dice.com');
+                    window.open(url, '_blank');
+                  }}
+                  sx={{ textTransform: 'none', fontSize: '0.78rem', color: '#475569', borderColor: '#cbd5e1' }}
+                >
+                  Open in New Tab
+                </Button>
+              </Box>
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Button
                   variant="outlined"

@@ -27,6 +27,7 @@ import {
   Snackbar,
   Card,
   CardContent,
+  Tooltip,
 } from '@mui/material';
 import {
   RefreshRounded as RefreshIcon,
@@ -37,6 +38,7 @@ import {
   DescriptionRounded as DescriptionIcon,
   WorkRounded as WorkIcon,
   ErrorOutlineRounded as ErrorOutlineIcon,
+  LaunchRounded as LaunchIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -299,6 +301,20 @@ export const ApplicationsPage: React.FC = () => {
                         >
                           Timeline
                         </Button>
+                        {app.application_url && (
+                          <Tooltip title="Open application on Dice in new tab">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(app.application_url, '_blank');
+                              }}
+                              sx={{ color: '#64748b', '&:hover': { color: '#2563eb' } }}
+                            >
+                              <LaunchIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Tooltip>
+                        )}
                       </Box>
                     </TableCell>
                   </TableRow>
@@ -331,9 +347,28 @@ export const ApplicationsPage: React.FC = () => {
                   {selectedApp.company} • Status: {selectedApp.status}
                 </Typography>
               </Box>
-              <IconButton size="small" onClick={() => setDrawerOpen(false)} sx={{ color: '#94a3b8', '&:hover': { color: '#ffffff' } }}>
-                <CloseIcon />
-              </IconButton>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {selectedApp.application_url && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<LaunchIcon sx={{ fontSize: '14px !important' }} />}
+                    onClick={() => window.open(selectedApp.application_url, '_blank')}
+                    sx={{
+                      color: '#94a3b8',
+                      borderColor: 'rgba(255,255,255,0.2)',
+                      fontSize: '0.75rem',
+                      textTransform: 'none',
+                      '&:hover': { borderColor: '#ffffff', color: '#ffffff' },
+                    }}
+                  >
+                    Open on Dice
+                  </Button>
+                )}
+                <IconButton size="small" onClick={() => setDrawerOpen(false)} sx={{ color: '#94a3b8', '&:hover': { color: '#ffffff' } }}>
+                  <CloseIcon />
+                </IconButton>
+              </Box>
             </Box>
 
             <Box sx={{ p: 3, overflowY: 'auto', flex: 1 }}>
@@ -378,9 +413,22 @@ export const ApplicationsPage: React.FC = () => {
             </Box>
 
             <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', bgcolor: '#f8fafc' }}>
-              <Button onClick={() => setDrawerOpen(false)} color="inherit" sx={{ fontWeight: 600 }}>
-                Close
-              </Button>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button onClick={() => setDrawerOpen(false)} color="inherit" sx={{ fontWeight: 600 }}>
+                  Close
+                </Button>
+                {selectedApp.application_url && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<LaunchIcon sx={{ fontSize: '14px !important' }} />}
+                    onClick={() => window.open(selectedApp.application_url, '_blank')}
+                    sx={{ textTransform: 'none', fontSize: '0.78rem', color: '#475569', borderColor: '#cbd5e1' }}
+                  >
+                    Open in New Tab
+                  </Button>
+                )}
+              </Box>
               {selectedApp.status === 'READY' && (
                 <Button
                   variant="contained"
@@ -433,20 +481,34 @@ export const ApplicationsPage: React.FC = () => {
             Playwright will navigate to the application wizard, attach this resume file, verify all fields, and click Submit.
           </Alert>
         </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={() => setSubmitModalOpen(false)} color="inherit" disabled={Boolean(submittingId)}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            color="success"
-            onClick={confirmSubmit}
-            disabled={Boolean(submittingId)}
-            startIcon={submittingId ? <CircularProgress size={14} color="inherit" /> : <SendIcon />}
-            sx={{ fontWeight: 700 }}
-          >
-            {submittingId ? 'Submitting on Dice...' : 'Confirm & Submit'}
-          </Button>
+        <DialogActions sx={{ px: 3, py: 2, display: 'flex', justifyContent: 'space-between' }}>
+          <Box>
+            {appToSubmit?.application_url && (
+              <Button
+                size="small"
+                startIcon={<LaunchIcon sx={{ fontSize: '14px !important' }} />}
+                onClick={() => window.open(appToSubmit.application_url, '_blank')}
+                sx={{ textTransform: 'none', color: '#475569', fontSize: '0.78rem' }}
+              >
+                Open on Dice in New Tab
+              </Button>
+            )}
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button onClick={() => setSubmitModalOpen(false)} color="inherit" disabled={Boolean(submittingId)}>
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              color="success"
+              onClick={confirmSubmit}
+              disabled={Boolean(submittingId)}
+              startIcon={submittingId ? <CircularProgress size={14} color="inherit" /> : <SendIcon />}
+              sx={{ fontWeight: 700 }}
+            >
+              {submittingId ? 'Submitting on Dice...' : 'Confirm & Submit'}
+            </Button>
+          </Box>
         </DialogActions>
       </Dialog>
 

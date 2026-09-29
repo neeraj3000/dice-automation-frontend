@@ -38,6 +38,7 @@ import {
   RefreshRounded as RefreshIcon,
   WorkRounded as WorkIcon,
   LocationOnRounded as LocationIcon,
+  LaunchRounded as LaunchIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -356,6 +357,20 @@ export const SearchProfilesPage: React.FC = () => {
                         >
                           {isRunning ? 'Scraping...' : 'Run Search'}
                         </Button>
+                        <Tooltip title="Open search on Dice in new tab">
+                          <IconButton
+                            size="small"
+                            onClick={() => {
+                              const q = encodeURIComponent(p.keywords.join(' '));
+                              const loc = encodeURIComponent(p.location || 'United States');
+                              const diceUrl = `https://www.dice.com/jobs?q=${q}&location=${loc}`;
+                              window.open(diceUrl, '_blank');
+                            }}
+                            sx={{ color: '#64748b', '&:hover': { color: '#2563eb' } }}
+                          >
+                            <LaunchIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Tooltip>
                         <Tooltip title="Edit Profile">
                           <IconButton size="small" onClick={() => handleOpenDialog(p)} sx={{ color: '#64748b' }}>
                             <EditIcon fontSize="small" />
