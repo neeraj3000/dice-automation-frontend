@@ -1,0 +1,83 @@
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400..600;1,8..60,400..500&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-ink: #15161a;
+  --color-ink-soft: #4a4d55;
+  --color-paper: #faf9f6;
+  --color-paper-raised: #ffffff;
+  --color-paper-sunken: #f4f2eb;
+  --color-signal: #1b5e4f;
+  --color-signal-soft: #e3efeb;
+  --color-signal-deep: #0f3d32;
+  --color-line: #e6e4dd;
+  --color-line-strong: #d5d2c6;
+  --color-amber: #b26217;
+  --color-amber-soft: #f8eee0;
+  --color-rust: #ab3722;
+  --color-rust-soft: #f9ebe7;
+
+  --font-serif: 'Source Serif 4', Georgia, serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --radius-card: 16px;
+  --radius-control: 10px;
+
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.02), 0 1px 2px -1px rgba(0, 0, 0, 0.02), 0 0 0 1px rgba(0, 0, 0, 0.02);
+  --shadow-raised: 0 10px 25px -5px rgba(21, 22, 26, 0.03), 0 8px 10px -6px rgba(21, 22, 26, 0.02), 0 0 0 1px rgba(21, 22, 26, 0.03);
+  --shadow-popover: 0 20px 40px -15px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+:root {
+  color-scheme: light;
+  --node-bg: #ffffff;
+  --node-border: #cbd5e1;
+  --badge-bg: #e2e8f0;
+  --badge-text: #94a3b8;
+  --label-active: #0f172a;
+  --label-idle: #94a3b8;
+}
+
+.dark {
+  color-scheme: dark;
+  --color-ink: #f4f3ef;
+  --color-ink-soft: #a8a69e;
+  --color-paper: #0d0e11;
+  --color-paper-raised: #15161a;
+  --color-paper-sunken: #07080a;
+  --color-signal: #46b399;
+  --color-signal-soft: #122521;
+  --color-signal-deep: #74ccb7;
+  --color-line: #22242b;
+  --color-line-strong: #32353e;
+  --color-amber: #e08b34;
+  --color-amber-soft: #231b11;
+  --color-rust: #e06048;
+  --color-rust-soft: #241412;
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.20), 0 0 0 1px rgba(255, 255, 255, 0.015);
+  --shadow-raised: 0 12px 30px -10px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.035);
+  --shadow-popover: 0 20px 40px -15px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --node-bg: #1e2028;
+  --node-border: #3f4354;
+  --badge-bg: #2d303d;
+  --badge-text: #64748b;
+  --label-active: #f1f5f9;
+  --label-idle: #475569;
+}
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body { @apply bg-paper font-sans text-ink antialiased; min-height: 100dvh; }
+  :focus-visible { outline: 2px solid var(--color-signal); outline-offset: 2px; border-radius: 6px; }
+  ::selection { background: var(--color-signal-soft); color: var(--color-signal-deep); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--color-line-strong); border-radius: 8px; border: 2px solid var(--color-paper); }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

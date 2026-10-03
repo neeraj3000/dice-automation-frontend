@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Apply2Hire – apply to jobs faster with your own resume library and browser automation." />
+    <meta name="theme-color" content="#1b5e4f" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Apply2Hire</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('a2h-theme');
+          // Default to light mode; only activate dark mode if explicitly set by user
+          var dark = t === 'dark';
+          if (dark) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
