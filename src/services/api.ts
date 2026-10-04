@@ -223,6 +223,26 @@ export const api = {
     return res.data;
   },
 
+  getDiceSessionStatus: async (checkLive: boolean = false, userId: string = 'default'): Promise<{
+    connected: boolean;
+    status: string;
+    last_verified_at?: string | null;
+    expires_at?: string | null;
+    username?: string;
+  }> => {
+    const res = await apiClient.get('/api/dice/session/status', { params: { check_live: checkLive, user_id: userId } });
+    return res.data;
+  },
+
+  disconnectDice: async (userId: string = 'default'): Promise<{
+    status: string;
+    message: string;
+    is_connected?: boolean;
+  }> => {
+    const res = await apiClient.post('/api/dice/session/disconnect', null, { params: { user_id: userId } });
+    return res.data;
+  },
+
   getDashboardStats: async (): Promise<DashboardStats> => {
     const res = await apiClient.get<DashboardStats>('/dashboard/stats');
     return res.data;

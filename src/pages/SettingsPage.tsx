@@ -15,10 +15,7 @@ import {
   Checkbox,
   CircularProgress,
   Alert,
-  Divider,
   Snackbar,
-  Chip,
-  Collapse,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -28,20 +25,28 @@ import {
   SaveRounded as SaveIcon,
   PersonRounded as PersonIcon,
   TuneRounded as TuneIcon,
-  LaunchRounded as LaunchIcon,
   RefreshRounded as RefreshIcon,
-  CheckCircleRounded as CheckCircleIcon,
   SecurityRounded as SecurityIcon,
-  CloudSyncRounded as CloudSyncIcon,
-  ContentPasteRounded as ContentPasteIcon,
-  BookmarkRounded as BookmarkIcon,
-  ContentCopyRounded as CopyIcon,
   OpenInNewRounded as OpenInNewIcon,
-  CheckRounded as CheckIcon,
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useDice } from '../context/DiceContext';
 import type { UserProfile, AppSettings } from '../types';
+
+function formatRelativeTime(dateInput?: string | null): string {
+  if (!dateInput) return 'Never';
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return 'Recently';
+
+  const diffSec = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (diffSec < 45) return 'just now';
+  if (diffSec < 90) return '1 minute ago';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} minutes ago`;
+  if (diffSec < 7200) return '1 hour ago';
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} hours ago`;
+  if (diffSec < 172800) return 'yesterday';
+  return `${Math.floor(diffSec / 86400)} days ago`;
+}
 
 export const SettingsPage: React.FC = () => {
   const [tab, setTab] = useState(0);
@@ -75,22 +80,30 @@ export const SettingsPage: React.FC = () => {
     headless_browser: false,
   });
 
-  const { diceStatus, refreshDiceStatus, isWaitingForLogin, onLoginSuccess } = useDice();
+  const {
+    diceStatus,
+    refreshDiceStatus,
+    disconnectDice,
+    isChecking,
+    isDisconnecting,
+    syncSuccess,
+    clearSyncSuccess,
+    syncError,
+    clearSyncError,
+    onLoginSuccess,
+  } = useDice();
+
+  const [connectModalOpen, setConnectModalOpen] = useState(false);
+  const [confirmDisconnectOpen, setConfirmDisconnectOpen] = useState(false);
+  const [verifyingLive, setVerifyingLive] = useState(false);
 
   useEffect(() => {
     if (onLoginSuccess) {
       onLoginSuccess((status) => {
-        setToastMessage(`Dice account connected successfully! Account: ${status.username || 'Active User'}`);
+        setToastMessage(`Dice account connected successfully! Account: ${status.username || 'Active Candidate'}`);
       });
     }
   }, [onLoginSuccess]);
-  const [verifyingLive, setVerifyingLive] = useState(false);
-  const [openingBrowser, setOpeningBrowser] = useState(false);
-  const [showSessionImporter, setShowSessionImporter] = useState(false);
-  const [syncModalOpen, setSyncModalOpen] = useState(false);
-  const [copiedSnippet, setCopiedSnippet] = useState(false);
-  const [cookieInput, setCookieInput] = useState('');
-  const [importingCookie, setImportingCookie] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -138,72 +151,17 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
-  const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
-  const syncSnippetCode = `(async function(){const u='${apiBaseUrl}/settings/import-dice-session';let c=[];try{if(window.cookieStore)c=await window.cookieStore.getAll();}catch(e){}const s={};try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&/cognito|dice|user|token/i.test(k))s[k]=localStorage.getItem(k);}}catch(e){}const p=JSON.stringify({cookie_string:document.cookie,cookies:c.length?c:undefined,local_storage:Object.keys(s).length?s:undefined});try{const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:p});const d=await r.json();if(d.is_connected){alert('Dice session synced successfully! Account: '+(d.username||'Connected'));return;}else{throw new Error(d.message);}}catch(err){try{await navigator.clipboard.writeText(p);alert('Direct sync was blocked by browser security (Mixed Content on localhost). Session data has been COPIED to your clipboard! Paste into Option C in your app.');}catch(ce){prompt('Copy your session data and paste into Option C:',p);}}})();`;
-  const bookmarkletCode = `javascript:(async function(){const u='${apiBaseUrl}/settings/import-dice-session';let c=[];try{if(window.cookieStore)c=await window.cookieStore.getAll();}catch(e){}const s={};try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&/cognito|dice|user|token/i.test(k))s[k]=localStorage.getItem(k);}}catch(e){}const p=JSON.stringify({cookie_string:document.cookie,cookies:c.length?c:undefined,local_storage:Object.keys(s).length?s:undefined});try{const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:p});const d=await r.json();if(d.is_connected){alert('Dice session synced successfully! Account: '+(d.username||'Connected'));return;}else{throw new Error(d.message);}}catch(err){try{await navigator.clipboard.writeText(p);alert('Direct sync was blocked by browser security (Mixed Content on localhost). Session data has been COPIED to your clipboard! Paste into Option C in your app.');}catch(ce){prompt('Copy your session data and paste into Option C:',p);}}})();`;
-
-  const handleOpenDiceLogin = async () => {
-    setOpeningBrowser(true);
-    try {
-      const res = await api.openDiceLogin();
-      if (res.cloud_mode) {
-        // Cloud / Headless environment: open login tab in user's browser & show sync modal
-        window.open(res.login_url || 'https://www.dice.com/dashboard/login', '_blank');
-        setSyncModalOpen(true);
-        setToastMessage(res.message || 'Dice login tab opened. Complete sign in, then sync your session.');
-      } else {
-        // Local desktop mode: visible Playwright window is opened on user's desktop
-        setToastMessage('Visible browser opened on your desktop! Log into Dice in that window; session will sync automatically.');
-      }
-    } catch {
-      // Fallback: open directly in user's browser and show sync modal
-      window.open('https://www.dice.com/dashboard/login', '_blank');
-      setSyncModalOpen(true);
-      setToastMessage('Opened Dice login tab. Follow instructions in the Sync Dialog.');
-    } finally {
-      setOpeningBrowser(false);
-    }
+  const handleDisconnectClick = () => {
+    setConfirmDisconnectOpen(true);
   };
 
-  const handleCopySyncSnippet = () => {
-    navigator.clipboard.writeText(syncSnippetCode);
-    setCopiedSnippet(true);
-    setToastMessage('1-Click Sync snippet copied! Paste in Dice tab console and press Enter.');
-    setTimeout(() => setCopiedSnippet(false), 3000);
-  };
-
-  const handleImportSession = async () => {
-    if (!cookieInput.trim()) {
-      setError('Please enter your Dice cookies or cookie string.');
-      return;
-    }
-    setImportingCookie(true);
-    try {
-      let parsedCookies = undefined;
-      let rawString = undefined;
-      const trimmed = cookieInput.trim();
-      if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          parsedCookies = Array.isArray(parsed) ? parsed : [parsed];
-        } catch {
-          rawString = trimmed;
-        }
-      } else {
-        rawString = trimmed;
-      }
-      const res = await api.importDiceSession({
-        cookies: parsedCookies,
-        cookie_string: rawString,
-      });
-      setToastMessage(res.message || 'Dice session cookies imported successfully!');
-      setCookieInput('');
-      setShowSessionImporter(false);
-      await refreshDiceStatus(true);
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Failed to import session cookies.');
-    } finally {
-      setImportingCookie(false);
+  const handleConfirmDisconnect = async () => {
+    setConfirmDisconnectOpen(false);
+    const success = await disconnectDice();
+    if (success) {
+      setToastMessage('Dice account disconnected successfully.');
+    } else {
+      setError('Failed to disconnect Dice session.');
     }
   };
 
@@ -211,10 +169,14 @@ export const SettingsPage: React.FC = () => {
     setVerifyingLive(true);
     try {
       const res = await refreshDiceStatus(true);
-      if (res.is_connected) {
-        setToastMessage(`Dice session active! Account: ${res.username || 'Active User'}`);
+      if (res.is_connected || res.status === 'CONNECTED' || res.status === 'valid') {
+        setToastMessage(`Dice session active and verified!`);
+      } else if (res.status === 'SESSION_EXPIRED') {
+        setError('Dice session has expired. Please reconnect using the Chrome extension.');
+      } else if (res.status === 'BROWSER_ERROR') {
+        setError('Browser verification encountered an error.');
       } else {
-        setError('Dice session is not connected or requires login.');
+        setError('Dice session is not connected.');
       }
     } catch {
       setError('Failed to verify Dice session.');
@@ -223,63 +185,80 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
+  const isConnected = Boolean(
+    diceStatus?.is_connected ||
+    diceStatus?.connected ||
+    diceStatus?.status === 'CONNECTED' ||
+    diceStatus?.status === 'valid'
+  );
+
+  const sessionStatus = diceStatus?.status || (isConnected ? 'CONNECTED' : 'DISCONNECTED');
+
   if (loading) {
     return (
-      <Box sx={{ textAlign: 'center', py: 8 }}>
-        <CircularProgress size={32} thickness={4} />
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-          Loading settings...
-        </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+        <CircularProgress size={36} sx={{ color: '#6366f1' }} />
       </Box>
     );
   }
 
   return (
-    <Box sx={{ pb: 6, maxWidth: 900 }}>
-      {/* Header */}
-      <Box sx={{ mb: 3.5 }}>
-        <Typography variant="h5" sx={{ fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>
+    <Box sx={{ maxWidth: 900, mx: 'auto', p: { xs: 2, sm: 3 } }}>
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h4" sx={{ fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', mb: 1 }}>
           Settings & Profile
         </Typography>
-        <Typography variant="body2" sx={{ color: '#64748b', mt: 0.5 }}>
-          Manage your personal details for automated form population and configure AI matching preferences.
+        <Typography variant="body2" color="text.secondary">
+          Configure personal information, auto-apply thresholds, and your Dice account connection.
         </Typography>
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
+        <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
 
-      <Paper variant="outlined" sx={{ borderRadius: 3, overflow: 'hidden' }}>
+      <Paper
+        elevation={0}
+        sx={{
+          borderRadius: 3,
+          border: '1px solid #e2e8f0',
+          overflow: 'hidden',
+          bgcolor: '#ffffff',
+        }}
+      >
         <Tabs
           value={tab}
-          onChange={(_, v) => setTab(v)}
-          variant="scrollable"
-          scrollButtons="auto"
-          allowScrollButtonsMobile
+          onChange={(_, val) => setTab(val)}
           sx={{
-            borderBottom: 1,
-            borderColor: 'divider',
-            px: { xs: 1.5, sm: 2.5 },
-            bgcolor: '#f8fafc',
-            '& .MuiTab-root': { fontWeight: 700, fontSize: '0.88rem', py: 2 },
+            px: 3,
+            pt: 1,
+            borderBottom: '1px solid #f1f5f9',
+            '& .MuiTab-root': {
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '0.875rem',
+              minHeight: 48,
+              color: '#64748b',
+              '&.Mui-selected': { color: '#6366f1' },
+            },
+            '& .MuiTabs-indicator': { bgcolor: '#6366f1', height: 3, borderRadius: '3px 3px 0 0' },
           }}
         >
-          <Tab icon={<PersonIcon sx={{ fontSize: 19 }} />} iconPosition="start" label="Personal Profile (Form Autofill)" />
-          <Tab icon={<TuneIcon sx={{ fontSize: 19 }} />} iconPosition="start" label="AI & Automation Engine" />
+          <Tab icon={<PersonIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="Personal Profile" />
+          <Tab icon={<TuneIcon sx={{ fontSize: 18 }} />} iconPosition="start" label="AI & Automation" />
         </Tabs>
 
-        {/* Tab 0: Profile */}
+        {/* Tab 0: Personal Profile */}
         {tab === 0 && (
           <Box sx={{ p: { xs: 2.5, sm: 4 } }}>
             <Box sx={{ mb: 3 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0f172a' }}>
-                Contact & Personal Information
+                Candidate Information
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                These values are deterministically filled into Dice application fields by Playwright.
+                Used to automatically populate recruiter screening questions and application details.
               </Typography>
             </Box>
 
@@ -301,7 +280,6 @@ export const SettingsPage: React.FC = () => {
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2.5, mb: 2.5 }}>
               <TextField
                 label="Email Address"
-                type="email"
                 size="small"
                 value={profile.email}
                 onChange={(e) => setProfile({ ...profile, email: e.target.value })}
@@ -314,7 +292,7 @@ export const SettingsPage: React.FC = () => {
               />
             </Box>
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '2fr 1fr 1fr' }, gap: 2.5, mb: 3 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '2fr 1fr 1fr' }, gap: 2.5, mb: 2.5 }}>
               <TextField
                 label="City"
                 size="small"
@@ -328,26 +306,17 @@ export const SettingsPage: React.FC = () => {
                 onChange={(e) => setProfile({ ...profile, state: e.target.value })}
               />
               <TextField
-                label="ZIP Code"
+                label="Zip Code"
                 size="small"
                 value={profile.zip_code}
                 onChange={(e) => setProfile({ ...profile, zip_code: e.target.value })}
               />
             </Box>
 
-            <Divider sx={{ my: 3 }} />
-
-            <Box sx={{ mb: 2.5 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0f172a' }}>
-                Professional Links & Work Authorization
-              </Typography>
-            </Box>
-
             <TextField
               fullWidth
-              label="LinkedIn URL"
+              label="LinkedIn Profile URL"
               size="small"
-              placeholder="https://linkedin.com/in/..."
               value={profile.linkedin_url}
               onChange={(e) => setProfile({ ...profile, linkedin_url: e.target.value })}
               sx={{ mb: 2.5 }}
@@ -426,11 +395,11 @@ export const SettingsPage: React.FC = () => {
                 Automation & Browser Session Configuration
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Control application rate limits, automation mode, and persistent Dice browser profile.
+                Control application rate limits, automation mode, and your synchronized Dice session.
               </Typography>
             </Box>
 
-            {/* Dice Account Connection Card */}
+            {/* Dice Account Connection Section */}
             <Paper
               variant="outlined"
               sx={{
@@ -441,138 +410,208 @@ export const SettingsPage: React.FC = () => {
                 border: '1px solid #e2e8f0',
               }}
             >
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1.5 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  <Box sx={{ p: 0.75, borderRadius: 1.5, bgcolor: '#ffffff', border: '1px solid #e2e8f0' }}>
-                    <SecurityIcon sx={{ fontSize: 20, color: '#6366f1' }} />
-                  </Box>
-                  <Box>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0f172a' }}>
-                      Dice.com Account Session
+              {/* Header */}
+              <Box sx={{ mb: 1.5 }}>
+                <Typography variant="h6" sx={{ fontWeight: 800, color: '#0f172a', fontSize: '1.05rem', mb: 0.75 }}>
+                  Dice Account
+                </Typography>
+
+                {/* State Badge / Indicator */}
+                {isChecking ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CircularProgress size={12} sx={{ color: '#6366f1' }} />
+                    <Typography sx={{ fontWeight: 600, color: '#64748b', fontSize: '0.85rem' }}>
+                      Checking status...
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Persistent Chrome profile authentication
+                  </Box>
+                ) : isConnected ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box
+                      component="span"
+                      sx={{
+                        width: 9,
+                        height: 9,
+                        borderRadius: '50%',
+                        bgcolor: '#10b981',
+                        boxShadow: '0 0 8px rgba(16, 185, 129, 0.7)',
+                        display: 'inline-block',
+                      }}
+                    />
+                    <Typography sx={{ fontWeight: 800, color: '#065f46', fontSize: '0.9rem' }}>
+                      Connected
                     </Typography>
                   </Box>
-                  <Chip
-                    icon={diceStatus?.is_connected ? <CheckCircleIcon sx={{ fontSize: '14px !important' }} /> : undefined}
-                    label={diceStatus?.is_connected ? 'CONNECTED' : 'NOT CONNECTED'}
-                    size="small"
-                    sx={{
-                      fontWeight: 800,
-                      fontSize: '0.72rem',
-                      bgcolor: diceStatus?.is_connected ? '#ecfdf5' : '#fffbeb',
-                      color: diceStatus?.is_connected ? '#065f46' : '#92400e',
-                      border: '1px solid',
-                      borderColor: diceStatus?.is_connected ? '#a7f3d0' : '#fde68a',
-                    }}
-                  />
-                </Box>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    startIcon={verifyingLive ? <CircularProgress size={14} /> : <RefreshIcon />}
-                    disabled={verifyingLive}
-                    onClick={handleVerifyDiceLive}
-                    sx={{ borderColor: '#cbd5e1', color: '#334155', fontSize: '0.78rem', fontWeight: 600 }}
-                  >
-                    {verifyingLive ? 'Verifying...' : 'Verify Session'}
-                  </Button>
-                  <Button
-                    variant="contained"
-                    size="small"
-                    startIcon={openingBrowser ? <CircularProgress size={14} color="inherit" /> : <LaunchIcon />}
-                    disabled={openingBrowser}
-                    onClick={handleOpenDiceLogin}
-                    sx={{ bgcolor: '#0f172a', '&:hover': { bgcolor: '#1e293b' }, fontSize: '0.78rem', fontWeight: 700 }}
-                  >
-                    {openingBrowser ? 'Opening...' : 'Open Dice in Browser'}
-                  </Button>
-                </Box>
+                ) : sessionStatus === 'SESSION_EXPIRED' ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box
+                      component="span"
+                      sx={{
+                        width: 9,
+                        height: 9,
+                        borderRadius: '50%',
+                        bgcolor: '#f59e0b',
+                        boxShadow: '0 0 8px rgba(245, 158, 11, 0.6)',
+                        display: 'inline-block',
+                      }}
+                    />
+                    <Typography sx={{ fontWeight: 800, color: '#92400e', fontSize: '0.9rem' }}>
+                      Session Expired
+                    </Typography>
+                  </Box>
+                ) : sessionStatus === 'BROWSER_ERROR' ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box
+                      component="span"
+                      sx={{
+                        width: 9,
+                        height: 9,
+                        borderRadius: '50%',
+                        bgcolor: '#ef4444',
+                        boxShadow: '0 0 8px rgba(239, 68, 68, 0.6)',
+                        display: 'inline-block',
+                      }}
+                    />
+                    <Typography sx={{ fontWeight: 800, color: '#991b1b', fontSize: '0.9rem' }}>
+                      Browser Error
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box
+                      component="span"
+                      sx={{
+                        width: 9,
+                        height: 9,
+                        borderRadius: '50%',
+                        border: '2px solid #64748b',
+                        bgcolor: 'transparent',
+                        display: 'inline-block',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                    <Typography sx={{ fontWeight: 800, color: '#475569', fontSize: '0.9rem' }}>
+                      Not Connected
+                    </Typography>
+                  </Box>
+                )}
               </Box>
 
-              {isWaitingForLogin && (
-                <Box sx={{ mb: 2, p: 1.5, borderRadius: 2, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  <CircularProgress size={16} sx={{ color: '#2563eb' }} />
-                  <Typography variant="caption" sx={{ color: '#1e40af', fontWeight: 600 }}>
-                    Waiting for Dice sign-in in browser window... (Real-time detection active)
-                  </Typography>
-                </Box>
-              )}
+              {/* Connected State Body */}
+              {isConnected ? (
+                <Box sx={{ mt: 2 }}>
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 600, display: 'block', mb: 0.25 }}>
+                      Last verified:
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: '#0f172a' }}>
+                      {formatRelativeTime(diceStatus?.last_verified_at || diceStatus?.last_verified)}
+                    </Typography>
+                  </Box>
 
-              {diceStatus?.is_connected ? (
-                <Box sx={{ bgcolor: '#ffffff', p: 2, borderRadius: 2, border: '1px solid #e2e8f0', mb: 2 }}>
-                  <Typography variant="body2" sx={{ color: '#0f172a', fontWeight: 700, mb: 0.5 }}>
-                    Active User Profile: {diceStatus.username || 'Active User'}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: '#64748b', display: 'block', lineHeight: 1.5 }}>
-                    {diceStatus.cookies_count || 24} authenticated session cookies active in <code>data/browser_profile/</code>. 
-                    Search runs and Application Wizard preparation will automatically run with your authenticated Dice profile.
-                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                      disabled={isDisconnecting || isChecking}
+                      onClick={handleDisconnectClick}
+                      sx={{
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        fontSize: '0.82rem',
+                        borderColor: '#fca5a5',
+                        color: '#dc2626',
+                        '&:hover': { bgcolor: '#fef2f2', borderColor: '#ef4444' },
+                      }}
+                    >
+                      {isDisconnecting ? 'Disconnecting...' : 'Disconnect Dice'}
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      disabled={verifyingLive || isChecking}
+                      onClick={handleVerifyDiceLive}
+                      startIcon={verifyingLive ? <CircularProgress size={13} /> : <RefreshIcon fontSize="small" />}
+                      sx={{
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.8rem',
+                        color: '#475569',
+                        borderColor: '#cbd5e1',
+                      }}
+                    >
+                      {verifyingLive ? 'Verifying...' : 'Verify Session'}
+                    </Button>
+                  </Box>
                 </Box>
               ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  No active Dice session detected. Click &quot;Open Dice in Browser&quot; to sign in in a new tab, or import your session cookies below for cloud deployments.
-                </Typography>
-              )}
-
-              {/* Cloud / Headless Session Sync Accordion */}
-              <Box sx={{ pt: 1.5, borderTop: '1px dashed #cbd5e1' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Button
-                    size="small"
-                    startIcon={<CloudSyncIcon fontSize="small" />}
-                    onClick={() => setShowSessionImporter(!showSessionImporter)}
-                    sx={{ textTransform: 'none', fontSize: '0.8rem', fontWeight: 600, color: '#4f46e5' }}
-                  >
-                    {showSessionImporter ? 'Hide Cloud Session Importer' : 'Cloud / Production: Import Session Cookies'}
-                  </Button>
-                  <Typography variant="caption" sx={{ color: '#64748b' }}>
-                    For headless/remote servers (Render, Docker, AWS)
-                  </Typography>
-                </Box>
-
-                <Collapse in={showSessionImporter}>
-                  <Box sx={{ mt: 2, p: 2, bgcolor: '#ffffff', borderRadius: 2, border: '1px solid #e2e8f0' }}>
-                    <Typography variant="caption" sx={{ display: 'block', mb: 1, color: '#475569', fontWeight: 500 }}>
-                      Paste your Dice session cookie string (from Chrome DevTools or <code>document.cookie</code>) or JSON array:
+                /* Disconnected State Body */
+                <Box sx={{ mt: 2 }}>
+                  {sessionStatus === 'SESSION_EXPIRED' && (
+                    <Alert severity="warning" sx={{ borderRadius: 2, mb: 2, py: 0.5 }}>
+                      Your Dice session has expired. Click <strong>Connect Dice</strong> to re-sync using the Dice Sync Chrome Extension.
+                    </Alert>
+                  )}
+                  {sessionStatus === 'BROWSER_ERROR' && (
+                    <Alert severity="error" sx={{ borderRadius: 2, mb: 2, py: 0.5 }}>
+                      Browser verification encountered an error. Click <strong>Connect Dice</strong> to re-sync your session.
+                    </Alert>
+                  )}
+                  {sessionStatus === 'LOGIN_REQUIRED' && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Login is required on Dice.com before synchronizing your account session.
                     </Typography>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={3}
+                  )}
+                  {!['SESSION_EXPIRED', 'BROWSER_ERROR', 'LOGIN_REQUIRED'].includes(sessionStatus) && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Connect your Dice candidate account to enable automated searches and application wizard.
+                    </Typography>
+                  )}
+
+                  <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <Button
+                      variant="contained"
+                      size="medium"
+                      onClick={() => {
+                        clearSyncError();
+                        clearSyncSuccess();
+                        setConnectModalOpen(true);
+                      }}
+                      sx={{
+                        bgcolor: '#0f172a',
+                        '&:hover': { bgcolor: '#1e293b' },
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        px: 3,
+                        py: 0.85,
+                        borderRadius: 2,
+                      }}
+                    >
+                      Connect Dice
+                    </Button>
+                    <Button
+                      variant="outlined"
                       size="small"
-                      placeholder="PASTE COOKIE STRING HERE (e.g. ds_session_id=...; or JSON cookie export)"
-                      value={cookieInput}
-                      onChange={(e) => setCookieInput(e.target.value)}
-                      sx={{ mb: 1.5, fontFamily: 'monospace', fontSize: '0.8rem' }}
-                    />
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => setShowSessionImporter(false)}
-                        sx={{ fontSize: '0.78rem' }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        startIcon={importingCookie ? <CircularProgress size={14} color="inherit" /> : <ContentPasteIcon />}
-                        disabled={importingCookie || !cookieInput.trim()}
-                        onClick={handleImportSession}
-                        sx={{ bgcolor: '#4f46e5', '&:hover': { bgcolor: '#4338ca' }, fontSize: '0.78rem', fontWeight: 700 }}
-                      >
-                        {importingCookie ? 'Importing...' : 'Sync Session to Cloud'}
-                      </Button>
-                    </Box>
+                      disabled={verifyingLive || isChecking}
+                      onClick={handleVerifyDiceLive}
+                      startIcon={verifyingLive ? <CircularProgress size={13} /> : <RefreshIcon fontSize="small" />}
+                      sx={{
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.8rem',
+                        color: '#475569',
+                        borderColor: '#cbd5e1',
+                      }}
+                    >
+                      {verifyingLive ? 'Checking...' : 'Check Status'}
+                    </Button>
                   </Box>
-                </Collapse>
-              </Box>
+                </Box>
+              )}
             </Paper>
 
+            {/* Automation Settings Form */}
             <Box sx={{ mb: 3 }}>
               <FormControl size="small" fullWidth>
                 <InputLabel>Default Automation Mode</InputLabel>
@@ -636,150 +675,220 @@ export const SettingsPage: React.FC = () => {
         )}
       </Paper>
 
-      {/* Interactive Dice Session Sync Modal */}
+      {/* Connect Dice Modal / Flow */}
       <Dialog
-        open={syncModalOpen}
-        onClose={() => setSyncModalOpen(false)}
+        open={connectModalOpen}
+        onClose={() => setConnectModalOpen(false)}
         maxWidth="sm"
         fullWidth
         slotProps={{ paper: { sx: { borderRadius: 3, p: 1 } } }}
       >
         <DialogTitle sx={{ fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 1 }}>
           <SecurityIcon sx={{ color: '#6366f1' }} />
-          Dice Account Session Sync
+          Connect Dice Account
         </DialogTitle>
         <DialogContent dividers sx={{ py: 2.5 }}>
-          {diceStatus?.is_connected ? (
+          {/* Security Guarantee: Never ask for user password */}
+          <Alert severity="info" sx={{ mb: 2.5, borderRadius: 2, bgcolor: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+              Zero-Password Security
+            </Typography>
+            <Typography variant="caption" sx={{ display: 'block', mt: 0.25 }}>
+              This application will <strong>never</strong> ask for your Dice password. Sign in normally in your official Chrome browser.
+            </Typography>
+          </Alert>
+
+          {/* Sync Success State */}
+          {syncSuccess || isConnected ? (
             <Alert severity="success" sx={{ mb: 2.5, borderRadius: 2 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                Successfully Connected to Dice!
+                Dice Account Successfully Connected!
               </Typography>
               <Typography variant="body2">
-                Active Account: <strong>{diceStatus.username || 'Authenticated Candidate'}</strong> ({diceStatus.cookies_count || 0} cookies active).
+                {diceStatus?.username ? `Active account: ${diceStatus.username}. ` : ''}Your session is verified and ready for automation.
               </Typography>
             </Alert>
-          ) : (
-            <Alert
-              severity="info"
-              icon={<CircularProgress size={18} sx={{ color: '#0284c7' }} />}
-              sx={{ mb: 2.5, borderRadius: 2, bgcolor: '#f0f9ff', borderColor: '#bae6fd' }}
-            >
-              <Typography variant="body2" sx={{ fontWeight: 600, color: '#0369a1' }}>
-                Waiting for sign-in... (Auto-detecting every 2s)
-              </Typography>
-              <Typography variant="caption" sx={{ color: '#0284c7', display: 'block', mt: 0.25 }}>
-                Log in to your Dice account in the opened tab, then sync your session below.
-              </Typography>
-            </Alert>
-          )}
+          ) : null}
 
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1e293b', mb: 1 }}>
-            Step 1: Sign in on Dice
-          </Typography>
-          <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<OpenInNewIcon />}
-              onClick={() => window.open('https://www.dice.com/dashboard/login', '_blank')}
-              sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem' }}
-            >
-              Re-open Dice Login Tab
-            </Button>
-            <Typography variant="caption" color="text.secondary">
-              If the tab was closed or blocked
+          {/* Sync Failure State */}
+          {syncError && !isConnected ? (
+            <Alert severity="error" sx={{ mb: 2.5, borderRadius: 2 }} onClose={clearSyncError}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                Connection Sync Failed
+              </Typography>
+              <Typography variant="body2">{syncError}</Typography>
+            </Alert>
+          ) : null}
+
+          {/* 5-Step Instructions */}
+          <Box sx={{ mb: 2.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#0f172a', mb: 2 }}>
+              Follow these steps to connect:
             </Typography>
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {/* Step 1 */}
+              <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                <Box
+                  sx={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: '50%',
+                    bgcolor: '#e0e7ff',
+                    color: '#4338ca',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '0.8rem',
+                    flexShrink: 0,
+                  }}
+                >
+                  1
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                    Open Dice in Chrome
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<OpenInNewIcon />}
+                    onClick={() => window.open('https://www.dice.com/dashboard/login', '_blank')}
+                    sx={{ mt: 0.75, textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', borderColor: '#cbd5e1' }}
+                  >
+                    Open Dice Login in New Tab
+                  </Button>
+                </Box>
+              </Box>
+
+              {/* Step 2 */}
+              <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                <Box
+                  sx={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: '50%',
+                    bgcolor: '#e0e7ff',
+                    color: '#4338ca',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '0.8rem',
+                    flexShrink: 0,
+                  }}
+                >
+                  2
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                    Log in normally
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Sign into your Dice account using your email/password or Google Sign-In with 2FA as usual.
+                  </Typography>
+                </Box>
+              </Box>
+
+              {/* Step 3 */}
+              <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                <Box
+                  sx={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: '50%',
+                    bgcolor: '#e0e7ff',
+                    color: '#4338ca',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '0.8rem',
+                    flexShrink: 0,
+                  }}
+                >
+                  3
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                    Use the Dice Sync Chrome Extension
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Click the Dice Automation Sync icon in your Chrome extensions bar.
+                  </Typography>
+                </Box>
+              </Box>
+
+              {/* Step 4 */}
+              <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                <Box
+                  sx={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: '50%',
+                    bgcolor: '#e0e7ff',
+                    color: '#4338ca',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '0.8rem',
+                    flexShrink: 0,
+                  }}
+                >
+                  4
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                    Click Sync
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    In the extension popup, click <strong>&quot;Sync Dice Account&quot;</strong>.
+                  </Typography>
+                </Box>
+              </Box>
+
+              {/* Step 5 */}
+              <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                <Box
+                  sx={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: '50%',
+                    bgcolor: '#e0e7ff',
+                    color: '#4338ca',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '0.8rem',
+                    flexShrink: 0,
+                  }}
+                >
+                  5
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                    Return here
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    This dialog will automatically detect your synced session in real-time.
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
           </Box>
 
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1e293b', mb: 1 }}>
-            Step 2: Sync Session to Cloud (Pick any method)
-          </Typography>
-
-          {/* Option A: 1-Click Bookmarklet */}
-          <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2, bgcolor: '#f8fafc' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: '#0f172a' }}>
-                Option A: 1-Click Bookmarklet (Instant)
+          {/* Live listening indicator */}
+          {!isConnected && (
+            <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <CircularProgress size={16} sx={{ color: '#6366f1' }} />
+              <Typography variant="caption" sx={{ color: '#475569', fontWeight: 600 }}>
+                Waiting for extension sync... (Auto-detecting in real-time)
               </Typography>
-              <Chip label="Easiest" size="small" color="primary" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700 }} />
             </Box>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-              Drag this button to your browser Bookmarks Bar. When logged into Dice, just click it to sync in 1 second!
-            </Typography>
-            <Button
-              variant="contained"
-              size="small"
-              href={bookmarkletCode}
-              startIcon={<BookmarkIcon />}
-              sx={{
-                bgcolor: '#4f46e5',
-                '&:hover': { bgcolor: '#4338ca' },
-                textTransform: 'none',
-                fontWeight: 700,
-                fontSize: '0.78rem',
-                cursor: 'grab',
-              }}
-              onClick={(e) => {
-                // If clicked directly in this tab
-                e.preventDefault();
-                setToastMessage("Drag this button to your Bookmarks Bar, then click it on the Dice tab!");
-              }}
-            >
-              ⭐ Sync Dice to App (Drag to Bookmarks)
-            </Button>
-          </Paper>
-
-          {/* Option B: 1-Click Console Snippet */}
-          <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2, bgcolor: '#f8fafc' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: '#0f172a' }}>
-                Option B: Console 1-Click Snippet
-              </Typography>
-              <Chip label="Zero-install" size="small" sx={{ height: 20, fontSize: '0.68rem', fontWeight: 700, bgcolor: '#ecfdf5', color: '#065f46' }} />
-            </Box>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-              Press <code>F12</code> on the Dice tab, click Console, paste this snippet and press Enter:
-            </Typography>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={copiedSnippet ? <CheckIcon /> : <CopyIcon />}
-              onClick={handleCopySyncSnippet}
-              sx={{ textTransform: 'none', fontWeight: 700, fontSize: '0.78rem' }}
-            >
-              {copiedSnippet ? 'Copied to Clipboard!' : 'Copy 1-Click Sync Snippet'}
-            </Button>
-          </Paper>
-
-          {/* Option C: Direct Paste */}
-          <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: '#f8fafc' }}>
-            <Typography variant="body2" sx={{ fontWeight: 700, color: '#0f172a', mb: 0.5 }}>
-              Option C: Paste Cookie String or JSON
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-              Paste cookie string from <code>document.cookie</code> or JSON cookie export:
-            </Typography>
-            <TextField
-              fullWidth
-              multiline
-              rows={2}
-              size="small"
-              placeholder="Paste cookies here (e.g. identity=...; or JSON)"
-              value={cookieInput}
-              onChange={(e) => setCookieInput(e.target.value)}
-              sx={{ mb: 1.5, fontFamily: 'monospace', fontSize: '0.75rem' }}
-            />
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={importingCookie ? <CircularProgress size={14} color="inherit" /> : <ContentPasteIcon />}
-              disabled={importingCookie || !cookieInput.trim()}
-              onClick={handleImportSession}
-              sx={{ bgcolor: '#0f172a', textTransform: 'none', fontWeight: 700, fontSize: '0.78rem' }}
-            >
-              {importingCookie ? 'Syncing...' : 'Sync Session to Cloud'}
-            </Button>
-          </Paper>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2, display: 'flex', justifyContent: 'space-between' }}>
           <Button
@@ -789,19 +898,53 @@ export const SettingsPage: React.FC = () => {
             onClick={handleVerifyDiceLive}
             sx={{ textTransform: 'none', fontWeight: 600 }}
           >
-            {verifyingLive ? 'Verifying...' : 'Check Connection Now'}
+            {verifyingLive ? 'Checking...' : 'Check Status Now'}
           </Button>
           <Button
-            variant={diceStatus?.is_connected ? "contained" : "outlined"}
-            color={diceStatus?.is_connected ? "success" : "inherit"}
-            onClick={() => setSyncModalOpen(false)}
-            sx={{ fontWeight: 700 }}
+            variant={isConnected ? 'contained' : 'outlined'}
+            color={isConnected ? 'success' : 'inherit'}
+            onClick={() => setConnectModalOpen(false)}
+            sx={{ fontWeight: 700, textTransform: 'none' }}
           >
-            {diceStatus?.is_connected ? 'Done' : 'Close'}
+            {isConnected ? 'Done' : 'Close'}
           </Button>
         </DialogActions>
       </Dialog>
 
+      {/* Disconnect Confirmation Dialog */}
+      <Dialog
+        open={confirmDisconnectOpen}
+        onClose={() => setConfirmDisconnectOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{ paper: { sx: { borderRadius: 3, p: 1 } } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: '#0f172a' }}>
+          Disconnect Dice Account?
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Are you sure you want to disconnect your Dice account session? You will need to re-sync using the Chrome extension to resume automated searches and applications.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 2.5, pb: 2 }}>
+          <Button onClick={() => setConfirmDisconnectOpen(false)} color="inherit" size="small" sx={{ textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDisconnect}
+            color="error"
+            variant="contained"
+            size="small"
+            disabled={isDisconnecting}
+            sx={{ fontWeight: 700, textTransform: 'none' }}
+          >
+            {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Toast Notification */}
       <Snackbar
         open={Boolean(toastMessage)}
         autoHideDuration={4000}
