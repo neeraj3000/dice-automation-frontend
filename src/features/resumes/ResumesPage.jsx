@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Eye, FileText, Pencil, Star, Trash2, UploadCloud } from 'lucide-react';
+import { Copy, Eye, FileText, Pencil, Plus, RefreshCw, Replace, Star, Trash2, UploadCloud, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Card } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -8,35 +8,70 @@ import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import TagInput from '../../components/ui/TagInput';
 import { Input, Textarea } from '../../components/ui/Field';
-import { EmptyState, PageHeader, Skeleton } from '../../components/ui/Misc';
+import { Chip, EmptyState, PageHeader, Skeleton } from '../../components/ui/Misc';
 import { cn } from '../../lib/cn';
 import { errorMessage, timeAgo } from '../../lib/format';
 import {
-  useDeleteResumeMutation, useGetResumesQuery, useSetDefaultResumeMutation, useUpdateResumeMutation, useUploadResumeMutation,
+  useDeleteResumeMutation,
+  useGetResumesQuery,
+  useReparseResumeMutation,
+  useReplaceResumeMutation,
+  useSetDefaultResumeMutation,
+  useUpdateResumeMutation,
+  useUploadResumeMutation,
 } from './resumesApi';
 
-const MAX_MB = 5;
+const MAX_MB = 10;
 
-function Dropzone({ onFile, uploading }) {
+function Dropzone({ onFiles, uploading }) {
   const ref = useRef(null);
   const [over, setOver] = useState(false);
-  const pick = (f) => {
-    if (!f) return;
-    if (!/\.(pdf|docx)$/i.test(f.name)) return toast.error('Upload a PDF or Word (.docx) file.');
-    if (f.size > MAX_MB * 1024 * 1024) return toast.error(`Files must be under ${MAX_MB} MB.`);
-    onFile(f);
+
+  const validateAndPick = (fileList) => {
+    if (!fileList || !fileList.length) return;
+    const valid = [];
+    for (const f of fileList) {
+      if (!/\.(pdf|docx)$/i.test(f.name)) {
+        toast.error(`"${f.name}" is not a PDF or DOCX file.`);
+        continue;
+      }
+      if (f.size > MAX_MB * 1024 * 1024) {
+        toast.error(`"${f.name}" exceeds ${MAX_MB} MB limit.`);
+        continue;
+      }
+      valid.push(f);
+    }
+    if (valid.length) onFiles(valid);
   };
+
   return (
     <div
-      onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
-      onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files?.[0]); }}
-      className={cn('flex flex-col items-center rounded-card border-2 border-dashed px-6 py-10 text-center transition', over ? 'border-signal bg-signal-soft/50' : 'border-line-strong bg-paper-raised')}
+      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => { e.preventDefault(); setOver(false); validateAndPick(Array.from(e.dataTransfer.files || [])); }}
+      className={cn(
+        'flex flex-col items-center rounded-card border-2 border-dashed px-6 py-10 text-center transition',
+        over ? 'border-signal bg-signal-soft/50' : 'border-line-strong bg-paper-raised'
+      )}
     >
-      <div className="mb-3 grid size-12 place-items-center rounded-full bg-signal-soft text-signal"><UploadCloud className="size-5" /></div>
-      <p className="font-serif text-lg font-medium">{uploading ? 'Reading your resume…' : 'Drop your resume here'}</p>
-      <p className="mt-1 text-sm text-ink-soft">PDF or Word, up to {MAX_MB} MB. We pull out your role, skills and experience.</p>
-      <input ref={ref} type="file" hidden accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ''; }} />
-      <Button className="mt-4" variant="secondary" loading={uploading} onClick={() => ref.current?.click()}>Choose file</Button>
+      <div className="mb-3 grid size-12 place-items-center rounded-full bg-signal-soft text-signal">
+        <UploadCloud className="size-5" />
+      </div>
+      <p className="font-serif text-lg font-medium">{uploading ? 'Processing resume files…' : 'Drop resumes here'}</p>
+      <p className="mt-1 text-sm text-ink-soft">
+        Select one or multiple PDF or Word files (up to {MAX_MB} MB each). We extract roles, skills, and experience automatically.
+      </p>
+      <input
+        ref={ref}
+        type="file"
+        multiple
+        hidden
+        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        onChange={(e) => { validateAndPick(Array.from(e.target.files || [])); e.target.value = ''; }}
+      />
+      <Button className="mt-4" variant="secondary" loading={uploading} onClick={() => ref.current?.click()}>
+        Choose file(s)
+      </Button>
     </div>
   );
 }
@@ -53,21 +88,144 @@ function PreviewModal({ resume, onClose }) {
 }
 
 function EditModal({ resume, onClose }) {
+  const [tab, setTab] = useState('details');
   const [update, { isLoading }] = useUpdateResumeMutation();
   const [form, setForm] = useState(() => ({
-    target_role: resume?.target_role ?? '', skills: resume?.skills ?? [], experience_years: resume?.experience_years ?? '', summary: resume?.summary ?? '',
+    target_role: resume?.target_role ?? '',
+    skills: resume?.skills ?? [],
+    experience_years: resume?.experience_years ?? '',
+    summary: resume?.summary ?? '',
+    custom_fields: Object.entries(resume?.custom_fields ?? {}).map(([key, value]) => ({ key, value: String(value) })),
   }));
-  const save = async () => {
-    try { await update({ id: resume.id, ...form }).unwrap(); toast.success('Resume updated'); onClose(); } catch (e) { toast.error(errorMessage(e)); }
+  const [newKey, setNewKey] = useState('');
+  const [newVal, setNewVal] = useState('');
+
+  const addCustomField = () => {
+    if (!newKey.trim()) return;
+    setForm((f) => ({ ...f, custom_fields: [...f.custom_fields, { key: newKey.trim(), value: newVal.trim() }] }));
+    setNewKey('');
+    setNewVal('');
   };
+
+  const removeCustomField = (index) => {
+    setForm((f) => ({ ...f, custom_fields: f.custom_fields.filter((_, i) => i !== index) }));
+  };
+
+  const save = async () => {
+    try {
+      const custom_fields_obj = form.custom_fields.reduce((acc, { key, value }) => {
+        if (key.trim()) acc[key.trim()] = value.trim();
+        return acc;
+      }, {});
+      await update({
+        id: resume.id,
+        target_role: form.target_role,
+        skills: form.skills,
+        experience_years: form.experience_years,
+        summary: form.summary,
+        custom_fields: custom_fields_obj,
+      }).unwrap();
+      toast.success('Resume updated');
+      onClose();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+
+  const copyRawText = () => {
+    if (resume?.raw_text) {
+      navigator.clipboard.writeText(resume.raw_text);
+      toast.success('Copied text to clipboard');
+    }
+  };
+
   return (
-    <Modal open onClose={onClose} title="Review extracted details" description="Skills drive job matching. Fix anything we got wrong."
-      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={save} loading={isLoading}>Save changes</Button></>}>
-      <div className="space-y-4">
-        <Input label="Target role" value={form.target_role} onChange={(e) => setForm({ ...form, target_role: e.target.value })} />
-        <Input label="Experience" placeholder="8+ years" value={form.experience_years} onChange={(e) => setForm({ ...form, experience_years: e.target.value })} />
-        <TagInput label="Skills" value={form.skills} onChange={(skills) => setForm({ ...form, skills })} />
-        <Textarea label="Summary" value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} />
+    <Modal
+      open
+      onClose={onClose}
+      wide
+      title="Edit resume details"
+      description="Refine extracted candidate attributes or add custom screening metadata."
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} loading={isLoading}>Save changes</Button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <div className="flex gap-2 border-b border-line pb-3">
+          <Chip active={tab === 'details'} onClick={() => setTab('details')}>Details & Skills</Chip>
+          <Chip active={tab === 'custom'} onClick={() => setTab('custom')}>Custom Metadata ({form.custom_fields.length})</Chip>
+          <Chip active={tab === 'raw'} onClick={() => setTab('raw')}>Raw Text</Chip>
+        </div>
+
+        {tab === 'details' && (
+          <div className="space-y-4">
+            <Input label="Target role" value={form.target_role} onChange={(e) => setForm({ ...form, target_role: e.target.value })} />
+            <Input label="Experience" placeholder="8+ years" value={form.experience_years} onChange={(e) => setForm({ ...form, experience_years: e.target.value })} />
+            <TagInput label="Skills" value={form.skills} onChange={(skills) => setForm({ ...form, skills })} />
+            <Textarea label="Summary" value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} />
+          </div>
+        )}
+
+        {tab === 'custom' && (
+          <div className="space-y-4">
+            <p className="text-xs text-ink-soft">
+              Attach custom attributes for recruiter filtering and screening (e.g., Security Clearance, Hourly Rate, Preferred Work Mode).
+            </p>
+            {form.custom_fields.map((cf, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <Input value={cf.key} disabled className="w-1/3" />
+                <Input
+                  value={cf.value}
+                  onChange={(e) => {
+                    const next = [...form.custom_fields];
+                    next[idx].value = e.target.value;
+                    setForm({ ...form, custom_fields: next });
+                  }}
+                  className="flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeCustomField(idx)}
+                  className="rounded-lg p-2 text-ink-soft hover:bg-rust-soft hover:text-rust"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            ))}
+            <div className="flex items-center gap-2 pt-2">
+              <Input
+                placeholder="Field name (e.g. clearance)"
+                value={newKey}
+                onChange={(e) => setNewKey(e.target.value)}
+                className="w-1/3"
+              />
+              <Input
+                placeholder="Value (e.g. Secret)"
+                value={newVal}
+                onChange={(e) => setNewVal(e.target.value)}
+                className="flex-1"
+              />
+              <Button variant="secondary" icon={Plus} size="sm" onClick={addCustomField}>
+                Add
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {tab === 'raw' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-ink-soft">Extracted plain text content from parsed file</span>
+              <Button size="sm" variant="secondary" icon={Copy} onClick={copyRawText}>Copy</Button>
+            </div>
+            <pre className="max-h-80 overflow-y-auto rounded-control border border-line bg-paper-sunken p-3 text-xs leading-relaxed text-ink-soft whitespace-pre-wrap">
+              {resume?.raw_text || 'No raw text parsed for this document.'}
+            </pre>
+          </div>
+        )}
       </div>
     </Modal>
   );
@@ -76,68 +234,203 @@ function EditModal({ resume, onClose }) {
 export default function ResumesPage() {
   const { data: resumes, isLoading } = useGetResumesQuery();
   const [upload, { isLoading: uploading }] = useUploadResumeMutation();
+  const [replaceResume, { isLoading: replacing }] = useReplaceResumeMutation();
+  const [reparseResume, { isLoading: reparsing }] = useReparseResumeMutation();
   const [setDefault] = useSetDefaultResumeMutation();
   const [remove] = useDeleteResumeMutation();
+
   const [preview, setPreview] = useState(null);
   const [editing, setEditing] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [activeReparseId, setActiveReparseId] = useState(null);
 
-  const onFile = useCallback(async (file) => {
-    try {
-      const r = await upload(file).unwrap();
-      toast.success('Resume added. Check the details we found.');
-      setEditing(r);
-    } catch (e) { toast.error(errorMessage(e)); }
+  const replaceFileRef = useRef(null);
+  const targetReplaceResumeRef = useRef(null);
+
+  const onFiles = useCallback(async (files) => {
+    if (files.length === 1) {
+      try {
+        const r = await upload(files[0]).unwrap();
+        toast.success('Resume added. Check the details we found.');
+        setEditing(r);
+      } catch (e) {
+        toast.error(errorMessage(e));
+      }
+    } else {
+      let count = 0;
+      for (const file of files) {
+        try {
+          await upload(file).unwrap();
+          count++;
+        } catch (e) {
+          toast.error(`Failed to upload ${file.name}: ${errorMessage(e)}`);
+        }
+      }
+      if (count > 0) {
+        toast.success(`Successfully uploaded ${count} resumes.`);
+      }
+    }
   }, [upload]);
+
+  const handleTriggerReplace = (resume) => {
+    targetReplaceResumeRef.current = resume;
+    replaceFileRef.current?.click();
+  };
+
+  const onReplaceFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    const targetResume = targetReplaceResumeRef.current;
+    if (!file || !targetResume) return;
+
+    try {
+      await replaceResume({ id: targetResume.id, file }).unwrap();
+      toast.success(`Replaced "${targetResume.file_name}" with "${file.name}"`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+
+  const handleReparse = async (id) => {
+    setActiveReparseId(id);
+    try {
+      await reparseResume(id).unwrap();
+      toast.success('Resume re-parsed with ATS engine');
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setActiveReparseId(null);
+    }
+  };
 
   return (
     <div>
-      <PageHeader title="Resumes" description="Keep several versions. We pick the best one for each job." />
-      <Dropzone onFile={onFile} uploading={uploading} />
+      <PageHeader
+        title="Resumes"
+        description="Manage candidate resumes, ATS skill extractions, and metadata for automated job matching."
+      />
+      <Dropzone onFiles={onFiles} uploading={uploading} />
+
+      <input
+        ref={replaceFileRef}
+        type="file"
+        hidden
+        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        onChange={onReplaceFileSelected}
+      />
 
       <div className="mt-8 space-y-4">
-        {isLoading ? [0, 1].map((i) => <Skeleton key={i} className="h-40" />)
-          : !resumes?.length ? <EmptyState icon={FileText} title="No resumes yet" description="Upload your first resume to start matching and applying." />
-          : (
-            <AnimatePresence initial={false}>
-              {resumes.map((r) => (
-                <motion.div key={r.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }}>
-                  <Card className="p-5">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:justify-between">
-                      <div className="min-w-0 space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="break-all font-serif text-lg font-medium">{r.file_name}</h3>
-                          {r.is_default && <Badge tone="signal" dot>Default</Badge>}
-                        </div>
-                        <p className="text-sm text-ink-soft">
-                          {[r.target_role, r.experience_years, `added ${timeAgo(r.created_at)}`].filter(Boolean).join(' · ')}
-                        </p>
-                        {r.summary && <p className="max-w-2xl text-sm leading-relaxed text-ink-soft">{r.summary}</p>}
-                        <div className="flex flex-wrap gap-1.5">
-                          {r.skills?.slice(0, 14).map((s) => <Badge key={s}>{s}</Badge>)}
-                          {r.skills?.length > 14 && <Badge>+{r.skills.length - 14}</Badge>}
-                          {!r.skills?.length && <span className="text-sm text-amber">No skills detected. Add some so matching works.</span>}
-                        </div>
+        {isLoading ? (
+          [0, 1].map((i) => <Skeleton key={i} className="h-40" />)
+        ) : !resumes?.length ? (
+          <EmptyState
+            icon={FileText}
+            title="No resumes yet"
+            description="Upload candidate resumes to start matching and applying automatically."
+          />
+        ) : (
+          <AnimatePresence initial={false}>
+            {resumes.map((r) => (
+              <motion.div
+                key={r.id}
+                layout
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+              >
+                <Card className="p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:justify-between">
+                    <div className="min-w-0 space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="break-all font-serif text-lg font-medium">{r.file_name}</h3>
+                        {r.is_default && <Badge tone="signal" dot>Default</Badge>}
+                        {r.custom_fields && Object.keys(r.custom_fields).length > 0 && (
+                          <Badge tone="neutral">
+                            {Object.entries(r.custom_fields).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                          </Badge>
+                        )}
                       </div>
-                      <div className="flex shrink-0 flex-wrap gap-2 sm:flex-col">
-                        <Button size="sm" variant="secondary" icon={Eye} onClick={() => setPreview(r)}>Preview</Button>
-                        <Button size="sm" variant="secondary" icon={Pencil} onClick={() => setEditing(r)}>Edit details</Button>
-                        {!r.is_default && <Button size="sm" variant="ghost" icon={Star} onClick={() => setDefault(r.id)}>Make default</Button>}
-                        <Button size="sm" variant="ghost" icon={Trash2} onClick={() => setConfirmDelete(r)}>Delete</Button>
+                      <p className="text-sm text-ink-soft">
+                        {[r.target_role, r.experience_years, `added ${timeAgo(r.created_at)}`].filter(Boolean).join(' · ')}
+                      </p>
+                      {r.summary && <p className="max-w-2xl text-sm leading-relaxed text-ink-soft">{r.summary}</p>}
+                      <div className="flex flex-wrap gap-1.5">
+                        {r.skills?.slice(0, 14).map((s) => <Badge key={s}>{s}</Badge>)}
+                        {r.skills?.length > 14 && <Badge>+{r.skills.length - 14}</Badge>}
+                        {!r.skills?.length && (
+                          <span className="text-sm text-amber">No skills detected. Add some so matching works.</span>
+                        )}
                       </div>
                     </div>
-                  </Card>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          )}
+                    <div className="flex shrink-0 flex-wrap gap-2 sm:flex-col">
+                      <Button size="sm" variant="secondary" icon={Eye} onClick={() => setPreview(r)}>
+                        Preview
+                      </Button>
+                      <Button size="sm" variant="secondary" icon={Pencil} onClick={() => setEditing(r)}>
+                        Edit details
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={RefreshCw}
+                        loading={activeReparseId === r.id}
+                        onClick={() => handleReparse(r.id)}
+                      >
+                        Re-parse
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={Replace}
+                        loading={replacing && targetReplaceResumeRef.current?.id === r.id}
+                        onClick={() => handleTriggerReplace(r)}
+                      >
+                        Replace file
+                      </Button>
+                      {!r.is_default && (
+                        <Button size="sm" variant="ghost" icon={Star} onClick={() => setDefault(r.id)}>
+                          Make default
+                        </Button>
+                      )}
+                      <Button size="sm" variant="ghost" icon={Trash2} onClick={() => setConfirmDelete(r)}>
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        )}
       </div>
 
       <PreviewModal resume={preview} onClose={() => setPreview(null)} />
       {editing && <EditModal key={editing.id} resume={editing} onClose={() => setEditing(null)} />}
-      <Modal open={!!confirmDelete} onClose={() => setConfirmDelete(null)} title="Delete this resume?" description={confirmDelete?.file_name}
-        footer={<><Button variant="ghost" onClick={() => setConfirmDelete(null)}>Keep it</Button>
-          <Button variant="danger" onClick={async () => { try { await remove(confirmDelete.id).unwrap(); toast.success('Resume deleted'); } catch (e) { toast.error(errorMessage(e)); } setConfirmDelete(null); }}>Delete resume</Button></>}>
+      <Modal
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        title="Delete this resume?"
+        description={confirmDelete?.file_name}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmDelete(null)}>Keep it</Button>
+            <Button
+              variant="danger"
+              onClick={async () => {
+                try {
+                  await remove(confirmDelete.id).unwrap();
+                  toast.success('Resume deleted');
+                } catch (e) {
+                  toast.error(errorMessage(e));
+                }
+                setConfirmDelete(null);
+              }}
+            >
+              Delete resume
+            </Button>
+          </>
+        }
+      >
         <p className="text-sm text-ink-soft">The file is permanently removed from storage. Past applications aren't affected.</p>
       </Modal>
     </div>

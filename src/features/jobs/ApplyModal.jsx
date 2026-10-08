@@ -46,7 +46,14 @@ export default function ApplyModal({ job, onClose }) {
         <div className="space-y-5">
           <Select label="Resume" value={resumeId} onChange={(e) => setResumeId(e.target.value)}
             hint={job?.match?.resume_id === resumeId ? 'Best match for this job.' : 'Tip: use "Match resume" on the job to find the best fit.'}>
-            {resumes.map((r) => <option key={r.id} value={r.id}>{r.file_name}{r.target_role ? ` · ${r.target_role}` : ''}</option>)}
+            {resumes.map((r) => {
+              const isRec = job?.match?.resume_id === r.id;
+              return (
+                <option key={r.id} value={r.id}>
+                  {isRec ? '★ ' : ''}{r.file_name}{r.target_role ? ` · ${r.target_role}` : ''}{isRec && job?.match?.score ? ` (${job.match.score}% match)` : ''}
+                </option>
+              );
+            })}
           </Select>
           <div className="space-y-2">
             {MODES.map((m) => (

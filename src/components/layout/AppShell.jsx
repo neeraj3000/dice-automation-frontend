@@ -8,6 +8,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { useLogoutMutation } from '../../features/auth/authApi';
 import { BOARD_REGISTRY } from '../../features/boards/boardRegistry';
 import { useApplicationWatcher } from '../../features/applications/useApplicationWatcher';
+import { useGetApplicationsQuery } from '../../features/applications/applicationsApi';
 import { Logo, Spinner } from '../ui/Misc';
 import { cn } from '../../lib/cn';
 
@@ -22,7 +23,7 @@ const linkCls = ({ isActive }) =>
   cn('flex items-center gap-3 rounded-control px-3 py-2 text-sm font-medium transition-colors',
     isActive ? 'bg-signal-soft text-signal-deep' : 'text-ink-soft hover:bg-paper-sunken hover:text-ink');
 
-function SidebarContent({ active }) {
+function SidebarContent({ active, reviewCount }) {
   const dispatch = useDispatch();
   const close = () => dispatch(closeSidebar());
   return (
@@ -33,7 +34,17 @@ function SidebarContent({ active }) {
           {NAV.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} onClick={close} className={linkCls}>
               <Icon className="size-[18px]" />{label}
-              {to === '/applications' && active && <span className="ml-auto size-2 animate-pulse rounded-full bg-amber" aria-label="Application running" />}
+              {to === '/applications' && reviewCount > 0 && (
+                <span
+                  className="ml-auto inline-flex items-center justify-center rounded-full bg-amber-soft px-1.5 py-0.5 text-[11px] font-semibold text-amber tabular-nums"
+                  title={`${reviewCount} applications waiting for review`}
+                >
+                  {reviewCount}
+                </span>
+              )}
+              {to === '/applications' && active && !reviewCount && (
+                <span className="ml-auto size-2 animate-pulse rounded-full bg-amber" aria-label="Application running" />
+              )}
             </NavLink>
           ))}
         </div>
@@ -62,17 +73,22 @@ export default function AppShell() {
   const { dark, toggle } = useTheme();
   const [logout, { isLoading }] = useLogoutMutation();
   const { active } = useApplicationWatcher();
+  const { data: apps } = useGetApplicationsQuery();
+
+  const reviewCount = (apps ?? []).filter((a) => a.status === 'REVIEW').length;
 
   return (
     <div className="min-h-dvh lg:pl-64">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-line bg-paper lg:block"><SidebarContent active={active} /></aside>
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-line bg-paper lg:block">
+        <SidebarContent active={active} reviewCount={reviewCount} />
+      </aside>
 
       <AnimatePresence>
         {open && (
           <>
             <motion.div className="fixed inset-0 z-40 bg-ink/40 lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => dispatch(closeSidebar())} />
             <motion.aside className="fixed inset-y-0 left-0 z-50 w-72 border-r border-line bg-paper lg:hidden" initial={{ x: -288 }} animate={{ x: 0 }} exit={{ x: -288 }} transition={{ type: 'spring', damping: 32, stiffness: 340 }}>
-              <SidebarContent active={active} />
+              <SidebarContent active={active} reviewCount={reviewCount} />
             </motion.aside>
           </>
         )}
