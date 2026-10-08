@@ -1,6 +1,23 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Copy, Eye, FileText, Pencil, Plus, RefreshCw, Replace, Star, Trash2, UploadCloud, X } from 'lucide-react';
+import {
+  Award,
+  Briefcase,
+  Copy,
+  Eye,
+  FileCheck,
+  FileText,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Replace,
+  Search,
+  Sparkles,
+  Star,
+  Trash2,
+  UploadCloud,
+  X,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Card } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -21,10 +38,9 @@ import {
   useUploadResumeMutation,
 } from './resumesApi';
 
-const MAX_MB = 10;
+const MAX_MB = 20;
 
-function Dropzone({ onFiles, uploading }) {
-  const ref = useRef(null);
+function Dropzone({ onFiles, uploading, inputRef }) {
   const [over, setOver] = useState(false);
 
   const validateAndPick = (fileList) => {
@@ -50,26 +66,26 @@ function Dropzone({ onFiles, uploading }) {
       onDragLeave={() => setOver(false)}
       onDrop={(e) => { e.preventDefault(); setOver(false); validateAndPick(Array.from(e.dataTransfer.files || [])); }}
       className={cn(
-        'flex flex-col items-center rounded-card border-2 border-dashed px-6 py-10 text-center transition',
+        'flex flex-col items-center rounded-card border-2 border-dashed px-6 py-9 text-center transition',
         over ? 'border-signal bg-signal-soft/50' : 'border-line-strong bg-paper-raised'
       )}
     >
       <div className="mb-3 grid size-12 place-items-center rounded-full bg-signal-soft text-signal">
         <UploadCloud className="size-5" />
       </div>
-      <p className="font-serif text-lg font-medium">{uploading ? 'Processing resume files…' : 'Drop resumes here'}</p>
-      <p className="mt-1 text-sm text-ink-soft">
-        Select one or multiple PDF or Word files (up to {MAX_MB} MB each). We extract roles, skills, and experience automatically.
+      <p className="font-serif text-lg font-medium">{uploading ? 'Processing resume files…' : 'Drop candidate resumes here'}</p>
+      <p className="mt-1 text-sm text-ink-soft max-w-md">
+        Select one or multiple PDF or Word files (up to {MAX_MB} MB each). Automatic text extraction and skill classification.
       </p>
       <input
-        ref={ref}
+        ref={inputRef}
         type="file"
         multiple
         hidden
         accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         onChange={(e) => { validateAndPick(Array.from(e.target.files || [])); e.target.value = ''; }}
       />
-      <Button className="mt-4" variant="secondary" loading={uploading} onClick={() => ref.current?.click()}>
+      <Button className="mt-4" variant="secondary" loading={uploading} onClick={() => inputRef.current?.click()}>
         Choose file(s)
       </Button>
     </div>
@@ -77,12 +93,35 @@ function Dropzone({ onFiles, uploading }) {
 }
 
 function PreviewModal({ resume, onClose }) {
-  if (!resume) return <Modal open={false} onClose={onClose} />;
-  const isPdf = /\.pdf$/i.test(resume.file_name);
-  const src = isPdf ? resume.cloudinary_url : `https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(resume.cloudinary_url)}`;
+  if (!resume) return null;
+  const isPdf = /\.pdf$/i.test(resume.file_name || '');
+  const url = resume.cloudinary_url || '';
+  const src = isPdf ? url : (url ? `https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(url)}` : '');
+
   return (
-    <Modal open onClose={onClose} title={resume.file_name} wide footer={<a href={resume.cloudinary_url} target="_blank" rel="noreferrer noopener"><Button variant="secondary">Open original</Button></a>}>
-      <iframe title={`Preview of ${resume.file_name}`} src={src} className="h-[65dvh] w-full rounded-control border border-line bg-white" />
+    <Modal
+      open
+      onClose={onClose}
+      wide
+      title={resume.file_name || 'Resume Preview'}
+      description={resume.target_role || 'Extracted document'}
+      footer={
+        url ? (
+          <a href={url} target="_blank" rel="noreferrer noopener">
+            <Button variant="secondary">Open original</Button>
+          </a>
+        ) : null
+      }
+    >
+      {url ? (
+        <iframe
+          title={`Preview of ${resume.file_name || 'resume'}`}
+          src={src}
+          className="h-[65dvh] w-full rounded-control border border-line bg-white"
+        />
+      ) : (
+        <div className="py-12 text-center text-sm text-ink-soft">No preview file URL available for this resume.</div>
+      )}
     </Modal>
   );
 }
@@ -90,12 +129,20 @@ function PreviewModal({ resume, onClose }) {
 function EditModal({ resume, onClose }) {
   const [tab, setTab] = useState('details');
   const [update, { isLoading }] = useUpdateResumeMutation();
+
+  const initialCustom = useMemo(() => {
+    if (resume?.custom_fields && typeof resume.custom_fields === 'object' && !Array.isArray(resume.custom_fields)) {
+      return Object.entries(resume.custom_fields).map(([key, value]) => ({ key, value: String(value ?? '') }));
+    }
+    return [];
+  }, [resume]);
+
   const [form, setForm] = useState(() => ({
     target_role: resume?.target_role ?? '',
-    skills: resume?.skills ?? [],
+    skills: Array.isArray(resume?.skills) ? resume.skills : [],
     experience_years: resume?.experience_years ?? '',
     summary: resume?.summary ?? '',
-    custom_fields: Object.entries(resume?.custom_fields ?? {}).map(([key, value]) => ({ key, value: String(value) })),
+    custom_fields: initialCustom,
   }));
   const [newKey, setNewKey] = useState('');
   const [newVal, setNewVal] = useState('');
@@ -232,10 +279,10 @@ function EditModal({ resume, onClose }) {
 }
 
 export default function ResumesPage() {
-  const { data: resumes, isLoading } = useGetResumesQuery();
+  const { data: resumes, isLoading, refetch } = useGetResumesQuery();
   const [upload, { isLoading: uploading }] = useUploadResumeMutation();
   const [replaceResume, { isLoading: replacing }] = useReplaceResumeMutation();
-  const [reparseResume, { isLoading: reparsing }] = useReparseResumeMutation();
+  const [reparseResume] = useReparseResumeMutation();
   const [setDefault] = useSetDefaultResumeMutation();
   const [remove] = useDeleteResumeMutation();
 
@@ -243,9 +290,53 @@ export default function ResumesPage() {
   const [editing, setEditing] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [activeReparseId, setActiveReparseId] = useState(null);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
 
+  const dropzoneInputRef = useRef(null);
   const replaceFileRef = useRef(null);
   const targetReplaceResumeRef = useRef(null);
+
+  // Defensively ensure resumeList is always an array
+  const resumeList = useMemo(() => {
+    if (Array.isArray(resumes)) return resumes;
+    if (Array.isArray(resumes?.items)) return resumes.items;
+    if (Array.isArray(resumes?.data)) return resumes.data;
+    return [];
+  }, [resumes]);
+
+  const uniqueRoles = useMemo(() => {
+    const set = new Set();
+    resumeList.forEach((r) => {
+      if (r?.target_role) set.add(r.target_role);
+    });
+    return Array.from(set);
+  }, [resumeList]);
+
+  const totalSkillsCount = useMemo(() => {
+    const set = new Set();
+    resumeList.forEach((r) => {
+      if (Array.isArray(r?.skills)) {
+        r.skills.forEach((s) => typeof s === 'string' && set.add(s.toLowerCase()));
+      }
+    });
+    return set.size;
+  }, [resumeList]);
+
+  const filteredResumes = useMemo(() => {
+    return resumeList.filter((r) => {
+      if (!r) return false;
+      const matchRole = !roleFilter || r.target_role === roleFilter;
+      if (!matchRole) return false;
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      const inName = (r.file_name || '').toLowerCase().includes(q) || (r.display_name || '').toLowerCase().includes(q);
+      const inRole = (r.target_role || '').toLowerCase().includes(q);
+      const inSkills = Array.isArray(r.skills) ? r.skills.some((s) => typeof s === 'string' && s.toLowerCase().includes(q)) : false;
+      const inSummary = (r.summary || '').toLowerCase().includes(q);
+      return inName || inRole || inSkills || inSummary;
+    });
+  }, [resumeList, search, roleFilter]);
 
   const onFiles = useCallback(async (files) => {
     if (files.length === 1) {
@@ -304,12 +395,60 @@ export default function ResumesPage() {
   };
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
-        title="Resumes"
+        title="Resume Library"
         description="Manage candidate resumes, ATS skill extractions, and metadata for automated job matching."
+        action={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              icon={RefreshCw}
+              onClick={() => refetch()}
+            >
+              Refresh
+            </Button>
+            <Button
+              icon={UploadCloud}
+              onClick={() => dropzoneInputRef.current?.click()}
+            >
+              Upload Resumes
+            </Button>
+          </div>
+        }
       />
-      <Dropzone onFiles={onFiles} uploading={uploading} />
+
+      {/* Metrics Row */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Card className="p-4 sm:p-5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Total Resumes</span>
+            <FileText className="size-4 text-signal" />
+          </div>
+          <p className="mt-2 text-2xl font-bold font-serif text-ink tabular-nums">{resumeList.length}</p>
+          <p className="mt-0.5 text-xs text-ink-soft">Stored documents for matching</p>
+        </Card>
+
+        <Card className="p-4 sm:p-5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Target Roles</span>
+            <Briefcase className="size-4 text-signal" />
+          </div>
+          <p className="mt-2 text-2xl font-bold font-serif text-ink tabular-nums">{uniqueRoles.length}</p>
+          <p className="mt-0.5 text-xs text-ink-soft">Unique candidate specializations</p>
+        </Card>
+
+        <Card className="p-4 sm:p-5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Extracted Skills</span>
+            <Sparkles className="size-4 text-amber" />
+          </div>
+          <p className="mt-2 text-2xl font-bold font-serif text-ink tabular-nums">{totalSkillsCount}</p>
+          <p className="mt-0.5 text-xs text-ink-soft">ATS keywords classified</p>
+        </Card>
+      </div>
+
+      <Dropzone onFiles={onFiles} uploading={uploading} inputRef={dropzoneInputRef} />
 
       <input
         ref={replaceFileRef}
@@ -319,18 +458,51 @@ export default function ResumesPage() {
         onChange={onReplaceFileSelected}
       />
 
-      <div className="mt-8 space-y-4">
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by candidate name, target role, or skills…"
+            className="h-10 w-full rounded-control border border-line-strong bg-paper-raised pl-9 pr-3 text-sm focus:border-signal focus:outline-none focus:ring-2 focus:ring-signal/20"
+          />
+        </div>
+        {uniqueRoles.length > 0 && (
+          <div className="w-full sm:w-56">
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="h-10 w-full rounded-control border border-line-strong bg-paper-raised px-3 text-sm focus:border-signal focus:outline-none"
+            >
+              <option value="">All Target Roles ({uniqueRoles.length})</option>
+              {uniqueRoles.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-4">
         {isLoading ? (
           [0, 1].map((i) => <Skeleton key={i} className="h-40" />)
-        ) : !resumes?.length ? (
+        ) : !filteredResumes.length ? (
           <EmptyState
             icon={FileText}
-            title="No resumes yet"
-            description="Upload candidate resumes to start matching and applying automatically."
+            title={search || roleFilter ? 'No matching resumes' : 'No resumes yet'}
+            description={
+              search || roleFilter
+                ? 'Try adjusting your search query or role filter.'
+                : 'Upload candidate resumes to start matching and applying automatically.'
+            }
           />
         ) : (
           <AnimatePresence initial={false}>
-            {resumes.map((r) => (
+            {filteredResumes.map((r) => (
               <motion.div
                 key={r.id}
                 layout
@@ -342,27 +514,34 @@ export default function ResumesPage() {
                   <div className="flex flex-col gap-4 sm:flex-row sm:justify-between">
                     <div className="min-w-0 space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="break-all font-serif text-lg font-medium">{r.file_name}</h3>
+                        <h3 className="break-all font-serif text-lg font-medium">
+                          {r.display_name || r.file_name}
+                        </h3>
                         {r.is_default && <Badge tone="signal" dot>Default</Badge>}
-                        {r.custom_fields && Object.keys(r.custom_fields).length > 0 && (
+                        {r.custom_fields && typeof r.custom_fields === 'object' && !Array.isArray(r.custom_fields) && Object.keys(r.custom_fields).length > 0 && (
                           <Badge tone="neutral">
-                            {Object.entries(r.custom_fields).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                            {Object.entries(r.custom_fields).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' · ')}
                           </Badge>
                         )}
                       </div>
                       <p className="text-sm text-ink-soft">
-                        {[r.target_role, r.experience_years, `added ${timeAgo(r.created_at)}`].filter(Boolean).join(' · ')}
+                        {[
+                          r.target_role,
+                          r.experience_years,
+                          r.file_name && r.display_name && r.file_name !== r.display_name ? r.file_name : null,
+                          r.created_at ? `added ${timeAgo(r.created_at)}` : null,
+                        ].filter(Boolean).join(' · ')}
                       </p>
                       {r.summary && <p className="max-w-2xl text-sm leading-relaxed text-ink-soft">{r.summary}</p>}
                       <div className="flex flex-wrap gap-1.5">
                         {r.skills?.slice(0, 14).map((s) => <Badge key={s}>{s}</Badge>)}
                         {r.skills?.length > 14 && <Badge>+{r.skills.length - 14}</Badge>}
-                        {!r.skills?.length && (
-                          <span className="text-sm text-amber">No skills detected. Add some so matching works.</span>
+                        {(!r.skills || !r.skills.length) && (
+                          <span className="text-sm text-amber">No skills detected. Click Edit to add skills.</span>
                         )}
                       </div>
                     </div>
-                    <div className="flex shrink-0 flex-wrap gap-2 sm:flex-col">
+                    <div className="flex shrink-0 flex-wrap gap-2 sm:flex-col sm:w-36">
                       <Button size="sm" variant="secondary" icon={Eye} onClick={() => setPreview(r)}>
                         Preview
                       </Button>
@@ -404,8 +583,9 @@ export default function ResumesPage() {
         )}
       </div>
 
-      <PreviewModal resume={preview} onClose={() => setPreview(null)} />
+      {preview && <PreviewModal resume={preview} onClose={() => setPreview(null)} />}
       {editing && <EditModal key={editing.id} resume={editing} onClose={() => setEditing(null)} />}
+
       <Modal
         open={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}
@@ -431,7 +611,7 @@ export default function ResumesPage() {
           </>
         }
       >
-        <p className="text-sm text-ink-soft">The file is permanently removed from storage. Past applications aren't affected.</p>
+        <p className="text-sm text-ink-soft">The file is permanently removed from storage. Past applications aren&apos;t affected.</p>
       </Modal>
     </div>
   );

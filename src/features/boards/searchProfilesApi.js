@@ -29,31 +29,52 @@ export const searchProfilesApi = api.injectEndpoints({
     getSearchProfiles: b.query({
       query: () => '/search-profiles',
       providesTags: ['SearchProfile'],
-      // Transform response to combine with or fallback to local storage
       transformResponse: (response) => {
-        const local = getLocalProfiles();
         if (Array.isArray(response) && response.length > 0) {
           return response;
         }
-        return local;
+        return getLocalProfiles();
       },
+    }),
+    getSearchProfile: b.query({
+      query: (id) => `/search-profiles/${id}`,
+      providesTags: (_r, _e, id) => [{ type: 'SearchProfile', id }],
     }),
     createSearchProfile: b.mutation({
       query: (body) => ({ url: '/search-profiles', method: 'POST', body }),
-      invalidatesTags: ['SearchProfile'],
+      invalidatesTags: ['SearchProfile', 'Stats'],
       async onQueryStarted(arg, { queryFulfilled }) {
         try {
           const { data } = await queryFulfilled;
           saveLocalProfile(data);
         } catch {
-          // If backend fails, save locally
-          saveLocalProfile({ ...arg, id: `local_${Date.now()}`, created_at: new Date().toISOString() });
+          saveLocalProfile({
+            ...arg,
+            id: `local_${Date.now()}`,
+            created_at: new Date().toISOString(),
+          });
+        }
+      },
+    }),
+    updateSearchProfile: b.mutation({
+      query: ({ id, ...body }) => ({
+        url: `/search-profiles/${id}`,
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: ['SearchProfile'],
+      async onQueryStarted({ id, ...body }, { queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled;
+          saveLocalProfile(data);
+        } catch {
+          saveLocalProfile({ id, ...body, updated_at: new Date().toISOString() });
         }
       },
     }),
     deleteSearchProfile: b.mutation({
       query: (id) => ({ url: `/search-profiles/${id}`, method: 'DELETE' }),
-      invalidatesTags: ['SearchProfile'],
+      invalidatesTags: ['SearchProfile', 'Stats'],
       async onQueryStarted(id, { queryFulfilled }) {
         removeLocalProfile(id);
         try {
@@ -63,11 +84,21 @@ export const searchProfilesApi = api.injectEndpoints({
         }
       },
     }),
+    runSearchProfile: b.mutation({
+      query: (id) => ({
+        url: `/search-profiles/${id}/run`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['Job', 'Stats', 'SearchProfile'],
+    }),
   }),
 });
 
 export const {
   useGetSearchProfilesQuery,
+  useGetSearchProfileQuery,
   useCreateSearchProfileMutation,
+  useUpdateSearchProfileMutation,
   useDeleteSearchProfileMutation,
+  useRunSearchProfileMutation,
 } = searchProfilesApi;

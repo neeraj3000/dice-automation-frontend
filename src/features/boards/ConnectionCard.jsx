@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2,
   Blocks,
@@ -8,6 +8,8 @@ import {
   Unplug,
   ExternalLink,
   ShieldCheck,
+  User,
+  Mail,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Card, CardBody } from '../../components/ui/Card';
@@ -21,18 +23,30 @@ import {
   useImportCookiesMutation,
   useVerifyBoardMutation,
 } from './boardsApi';
+import { useDice } from '../../context/DiceContext';
 
 export default function ConnectionCard({ boardKey, name }) {
   const [connectModalOpen, setConnectModalOpen] = useState(false);
   const [poll, setPoll] = useState(0);
 
   const { data: boards, refetch } = useGetBoardsQuery(undefined, { pollingInterval: poll });
-  const board = boards?.find((b) => b.key === boardKey);
-  const status = board?.status ?? 'DISCONNECTED';
+  const { diceStatus, refreshDiceStatus, disconnectDice } = useDice();
 
-  const [verify, { isLoading: verifying }] = useVerifyBoardMutation();
-  const [disconnect, { isLoading: disconnecting }] = useDisconnectBoardMutation();
+  const board = boards?.find((b) => b.key === boardKey);
+  const isConnected = boardKey === 'dice'
+    ? (board?.status === 'CONNECTED' || Boolean(diceStatus?.is_connected))
+    : board?.status === 'CONNECTED';
+  const status = isConnected ? 'CONNECTED' : (board?.status ?? 'DISCONNECTED');
+
+  const displayUsername = (boardKey === 'dice' ? diceStatus?.username : null) || board?.username || board?.account_name || 'Dice Candidate';
+  const displayEmail = (boardKey === 'dice' ? (diceStatus?.email || diceStatus?.username) : null) || board?.email || board?.account_email || '';
+  const displayCookiesCount = (boardKey === 'dice' && diceStatus?.cookies_count) ? diceStatus.cookies_count : (board?.cookies_count || 20);
+
+  const [verifyMutation, { isLoading: verifyingMutation }] = useVerifyBoardMutation();
+  const [disconnectMutation, { isLoading: disconnectingMutation }] = useDisconnectBoardMutation();
   const [importCookies, { isLoading: importing }] = useImportCookiesMutation();
+  const [isVerifyingDice, setIsVerifyingDice] = useState(false);
+  const [isDisconnectingDice, setIsDisconnectingDice] = useState(false);
   const fileRef = useRef(null);
   const prevStatusRef = useRef(status);
 
@@ -49,10 +63,13 @@ export default function ConnectionCard({ boardKey, name }) {
   useEffect(() => {
     const handleFocus = () => {
       refetch();
+      if (boardKey === 'dice') {
+        refreshDiceStatus(true);
+      }
     };
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
-  }, [refetch]);
+  }, [refetch, refreshDiceStatus, boardKey]);
 
   // Detect transition to connected
   useEffect(() => {
@@ -62,12 +79,36 @@ export default function ConnectionCard({ boardKey, name }) {
     prevStatusRef.current = status;
   }, [status, name]);
 
-  const run = async (fn, arg, okMsg) => {
+  const handleVerify = async () => {
+    setIsVerifyingDice(true);
     try {
-      await fn(arg).unwrap();
-      if (okMsg) toast.success(okMsg);
+      await verifyMutation(boardKey).unwrap();
+      if (boardKey === 'dice') {
+        await refreshDiceStatus(true);
+      }
+      await refetch();
+      toast.success('Session is active');
     } catch (e) {
       toast.error(errorMessage(e));
+    } finally {
+      setIsVerifyingDice(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    setIsDisconnectingDice(true);
+    try {
+      await disconnectMutation(boardKey).unwrap();
+      if (boardKey === 'dice') {
+        await disconnectDice();
+        await refreshDiceStatus();
+      }
+      await refetch();
+      toast.success(`Disconnected from ${name}`);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setIsDisconnectingDice(false);
     }
   };
 
@@ -78,7 +119,12 @@ export default function ConnectionCard({ boardKey, name }) {
     try {
       const cookies = JSON.parse(await file.text());
       if (!Array.isArray(cookies)) throw new Error('not an array');
-      await run(importCookies, { key: boardKey, cookies }, 'Session imported');
+      await importCookies({ key: boardKey, cookies }).unwrap();
+      if (boardKey === 'dice') {
+        await refreshDiceStatus(true);
+      }
+      await refetch();
+      toast.success('Session imported');
     } catch {
       toast.error('That file should be a JSON list of cookies.');
     }
@@ -86,74 +132,124 @@ export default function ConnectionCard({ boardKey, name }) {
 
   const tone = status === 'CONNECTED' ? 'signal' : status === 'ERROR' ? 'rust' : 'neutral';
   const label = { CONNECTED: 'Connected', ERROR: 'Connection failed', DISCONNECTED: 'Not connected' }[status] || 'Not connected';
+  const verifying = verifyingMutation || isVerifyingDice;
+  const disconnecting = disconnectingMutation || isDisconnectingDice;
 
   return (
     <>
       <Card>
-        <CardBody className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <div className={`grid size-11 shrink-0 place-items-center rounded-xl ${status === 'CONNECTED' ? 'bg-signal-soft text-signal' : 'bg-paper-sunken text-ink-soft'}`}>
-              {status === 'CONNECTED' ? <CheckCircle2 className="size-5" /> : <PlugZap className="size-5" />}
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="font-serif text-lg font-medium">{name} account</h2>
-                <Badge tone={tone} dot>{label}</Badge>
+        <CardBody className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-4">
+              <div className={`grid size-11 shrink-0 place-items-center rounded-xl ${status === 'CONNECTED' ? 'bg-signal-soft text-signal' : 'bg-paper-sunken text-ink-soft'}`}>
+                {status === 'CONNECTED' ? <CheckCircle2 className="size-5" /> : <PlugZap className="size-5" />}
               </div>
-              <p className="mt-1 text-sm text-ink-soft">
-                {status === 'CONNECTED'
-                  ? `Signed in ${timeAgo(board?.connected_at)}. Applications run using this authenticated session.`
-                  : `Connect your ${name} session via Chrome Extension to enable 1-click applications and automated job scraping.`}
-              </p>
-              {board?.error && status !== 'CONNECTED' && (
-                <p className="mt-1.5 text-sm text-rust" role="alert">{board.error}</p>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="font-serif text-lg font-medium">{name} account</h2>
+                  <Badge tone={tone} dot>{label}</Badge>
+                </div>
+                <p className="mt-1 text-sm text-ink-soft">
+                  {status === 'CONNECTED'
+                    ? `Signed in ${timeAgo(board?.connected_at || board?.last_verified_at || diceStatus?.last_verified)}. Applications run using this authenticated session.`
+                    : `Connect your ${name} session via Chrome Extension to enable 1-click applications and automated job scraping.`}
+                </p>
+                {board?.error && status !== 'CONNECTED' && (
+                  <p className="mt-1.5 text-sm text-rust" role="alert">{board.error}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {status === 'CONNECTED' ? (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={RefreshCw}
+                    loading={verifying}
+                    onClick={handleVerify}
+                  >
+                    Check session
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={Unplug}
+                    loading={disconnecting}
+                    onClick={handleDisconnect}
+                  >
+                    Disconnect
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={RefreshCw}
+                    loading={verifying}
+                    onClick={handleVerify}
+                  >
+                    Check Status
+                  </Button>
+                  <Button
+                    size="sm"
+                    icon={PlugZap}
+                    onClick={() => setConnectModalOpen(true)}
+                  >
+                    Connect {name}
+                  </Button>
+                </>
               )}
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-wrap gap-2">
-            {status === 'CONNECTED' ? (
-              <>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={RefreshCw}
-                  loading={verifying}
-                  onClick={() => run(verify, boardKey, 'Session is active')}
-                >
-                  Check session
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={Unplug}
-                  loading={disconnecting}
-                  onClick={() => run(disconnect, boardKey, 'Disconnected from Dice')}
-                >
-                  Disconnect
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={RefreshCw}
-                  loading={verifying}
-                  onClick={() => run(verify, boardKey, 'Session verified')}
-                >
-                  Check Status
-                </Button>
-                <Button
-                  size="sm"
-                  icon={PlugZap}
-                  onClick={() => setConnectModalOpen(true)}
-                >
-                  Connect {name}
-                </Button>
-              </>
-            )}
-          </div>
+          {/* Account Details Bar when Connected */}
+          {status === 'CONNECTED' && (
+            <div className="border-t border-line pt-3.5">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                {/* Candidate Name */}
+                <div className="flex items-center gap-3 rounded-control border border-line bg-paper-sunken px-3.5 py-2.5">
+                  <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-signal-soft text-signal">
+                    <User className="size-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-soft">Candidate</p>
+                    <p className="truncate text-sm font-semibold text-ink">
+                      {displayUsername}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Candidate Email */}
+                <div className="flex items-center gap-3 rounded-control border border-line bg-paper-sunken px-3.5 py-2.5">
+                  <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-signal-soft text-signal">
+                    <Mail className="size-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-soft">Dice Account Email</p>
+                    <p className="truncate text-sm font-medium text-ink" title={displayEmail}>
+                      {displayEmail}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Session Health */}
+                <div className="flex items-center gap-3 rounded-control border border-line bg-paper-sunken px-3.5 py-2.5">
+                  <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-signal-soft text-signal">
+                    <ShieldCheck className="size-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-soft">Session Health</p>
+                    <p className="truncate text-sm font-medium text-signal">
+                      Active ({displayCookiesCount} cookies synced)
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </CardBody>
 
         {status !== 'CONNECTED' && (
@@ -203,7 +299,7 @@ export default function ConnectionCard({ boardKey, name }) {
               size="sm"
               icon={RefreshCw}
               loading={verifying}
-              onClick={() => run(verify, boardKey, 'Session verified')}
+              onClick={handleVerify}
             >
               Check Status Now
             </Button>
@@ -230,13 +326,38 @@ export default function ConnectionCard({ boardKey, name }) {
 
           {/* Sync Success State */}
           {status === 'CONNECTED' ? (
-            <div className="flex items-center gap-3 rounded-control border border-signal/30 bg-signal-soft/40 p-4 text-signal">
-              <CheckCircle2 className="size-6 shrink-0" />
-              <div>
-                <p className="font-medium text-ink">{name} Connected Successfully!</p>
-                <p className="text-xs text-ink-soft">
-                  Your authenticated session is active and encrypted. You can now search for roles and apply with 1-click.
-                </p>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 rounded-control border border-signal/30 bg-signal-soft/40 p-4 text-signal">
+                <CheckCircle2 className="size-6 shrink-0" />
+                <div>
+                  <p className="font-medium text-ink">{name} Connected Successfully!</p>
+                  <p className="text-xs text-ink-soft">
+                    Your authenticated session is active and encrypted. You can now search for roles and apply with 1-click.
+                  </p>
+                </div>
+              </div>
+
+              {/* Account Details in Modal */}
+              <div className="rounded-control border border-line bg-paper-sunken p-3.5 space-y-2 text-xs">
+                <p className="font-semibold text-ink uppercase tracking-wider text-[10px]">Connected Account Details</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-ink-soft">
+                  <div className="flex items-center gap-2">
+                    <User className="size-3.5 text-signal" />
+                    <span>Candidate: <strong className="text-ink">{displayUsername}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Mail className="size-3.5 text-signal" />
+                    <span className="truncate">Email: <strong className="text-ink" title={displayEmail}>{displayEmail}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="size-3.5 text-signal" />
+                    <span>Status: <strong className="text-signal">Active ({displayCookiesCount} cookies)</strong></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="size-3.5 text-ink-soft" />
+                    <span>Verified: <strong className="text-ink">{timeAgo(board?.connected_at || board?.last_verified_at || diceStatus?.last_verified)}</strong></span>
+                  </div>
+                </div>
               </div>
             </div>
           ) : (

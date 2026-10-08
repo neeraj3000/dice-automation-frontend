@@ -5,13 +5,17 @@ import SearchPanel from './SearchPanel';
 import JobsList from '../jobs/JobsList';
 import { getBoardMeta } from './boardRegistry';
 import { useGetBoardsQuery } from './boardsApi';
+import { useDice } from '../../context/DiceContext';
 
 export default function BoardPage() {
   const { boardKey } = useParams();
   const meta = getBoardMeta(boardKey);
   const { data: boards } = useGetBoardsQuery();
+  const { diceStatus } = useDice();
   if (!meta?.enabled) return <Navigate to="/" replace />;
-  const connected = boards?.find((b) => b.key === boardKey)?.status === 'CONNECTED';
+  const connected = boardKey === 'dice'
+    ? (boards?.find((b) => b.key === boardKey)?.status === 'CONNECTED' || Boolean(diceStatus?.is_connected))
+    : boards?.find((b) => b.key === boardKey)?.status === 'CONNECTED';
 
   return (
     <div className="space-y-6">

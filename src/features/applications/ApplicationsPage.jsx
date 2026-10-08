@@ -1,13 +1,32 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, ExternalLink, HelpCircle, ListChecks, Loader2 } from 'lucide-react';
+import {
+  AlertCircle,
+  Briefcase,
+  CheckCircle2,
+  ChevronDown,
+  Compass,
+  ExternalLink,
+  FileText,
+  HelpCircle,
+  ListChecks,
+  Loader2,
+  RefreshCw,
+  Send,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
-import { Card } from '../../components/ui/Card';
+import { Card, CardBody } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
+import Modal from '../../components/ui/Modal';
 import { Chip, EmptyState, PageHeader, Skeleton } from '../../components/ui/Misc';
 import { errorMessage, timeAgo } from '../../lib/format';
-import { useGetApplicationsQuery, useRetryApplicationMutation, useSubmitApplicationMutation } from './applicationsApi';
+import {
+  useGetApplicationsQuery,
+  useRetryApplicationMutation,
+  useSubmitApplicationMutation,
+} from './applicationsApi';
 import { STATUS_META } from './statusMeta';
 import ReviewModal from './ReviewModal';
 
@@ -20,14 +39,15 @@ const BASE_FILTERS = [
   ['FAILED', 'Failed'],
 ];
 
-function Row({ app, onReview }) {
+function ApplicationRow({ app, onReview, onSubmitConfirm }) {
   const [open, setOpen] = useState(false);
-  const [submit, { isLoading: submitting }] = useSubmitApplicationMutation();
   const [retry, { isLoading: retrying }] = useRetryApplicationMutation();
   const meta = STATUS_META[app.status] ?? STATUS_META.FAILED;
-  const act = async (fn) => {
+
+  const handleRetry = async () => {
     try {
-      await fn(app.id).unwrap();
+      await retry(app.id).unwrap();
+      toast.success('Retrying application…');
     } catch (e) {
       toast.error(errorMessage(e));
     }
@@ -39,33 +59,56 @@ function Row({ app, onReview }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-serif text-lg font-medium">{app.job_title}</h3>
-            <Badge tone={meta.tone} dot>{meta.label}</Badge>
+            <Badge tone={meta.tone} dot>
+              {meta.label}
+            </Badge>
+            {app.mode && (
+              <Badge tone="neutral" className="text-[10px]">
+                {app.mode}
+              </Badge>
+            )}
           </div>
           <p className="mt-0.5 text-sm text-ink-soft">
-            {[app.company, app.board && app.board[0].toUpperCase() + app.board.slice(1), timeAgo(app.created_at)]
+            {[
+              app.company,
+              app.resume_name && `Resume: ${app.resume_name}`,
+              app.board && app.board[0].toUpperCase() + app.board.slice(1),
+              timeAgo(app.created_at || app.applied_at),
+            ]
               .filter(Boolean)
               .join(' · ')}
           </p>
           <p className="mt-1.5 flex items-center gap-1.5 text-sm" aria-live="polite">
             {app.status === 'PREPARING' && <Loader2 className="size-3.5 animate-spin text-amber" />}
             {app.status === 'REVIEW' && <HelpCircle className="size-3.5 text-amber" />}
-            {app.steps?.length && app.status === 'PREPARING' ? app.steps[app.steps.length - 1].message : app.message}
+            {app.steps?.length && app.status === 'PREPARING'
+              ? app.steps[app.steps.length - 1].message
+              : app.message}
           </p>
         </div>
+
         <div className="flex flex-wrap gap-2">
           {app.status === 'REVIEW' && !app.external_url && (
-            <Button size="sm" onClick={() => onReview(app)}>Answer questions</Button>
+            <Button size="sm" onClick={() => onReview(app)}>
+              Answer questions
+            </Button>
           )}
           {app.external_url && (
             <a href={app.external_url} target="_blank" rel="noreferrer noopener">
-              <Button size="sm" variant="secondary" icon={ExternalLink}>Apply on site</Button>
+              <Button size="sm" variant="secondary" icon={ExternalLink}>
+                Apply on site
+              </Button>
             </a>
           )}
           {app.status === 'READY' && (
-            <Button size="sm" loading={submitting} onClick={() => act(submit)}>Submit application</Button>
+            <Button size="sm" onClick={() => onSubmitConfirm(app)}>
+              Submit application
+            </Button>
           )}
           {app.status === 'FAILED' && (
-            <Button size="sm" variant="secondary" loading={retrying} onClick={() => act(retry)}>Try again</Button>
+            <Button size="sm" variant="secondary" loading={retrying} onClick={handleRetry}>
+              Try again
+            </Button>
           )}
           {app.steps?.length > 0 && (
             <Button
@@ -80,6 +123,7 @@ function Row({ app, onReview }) {
           )}
         </div>
       </div>
+
       <AnimatePresence initial={false}>
         {open && (
           <motion.ul
@@ -93,7 +137,7 @@ function Row({ app, onReview }) {
                 <span className="w-16 shrink-0 tabular-nums">
                   {new Date(s.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
-                {s.message}
+                <span>{s.message}</span>
               </li>
             ))}
           </motion.ul>
@@ -104,76 +148,162 @@ function Row({ app, onReview }) {
 }
 
 export default function ApplicationsPage() {
-  const { data, isLoading } = useGetApplicationsQuery();
+  const navigate = useNavigate();
+  const { data: applications = [], isLoading, isFetching, refetch } = useGetApplicationsQuery();
+  const [submitApp, { isLoading: submitting }] = useSubmitApplicationMutation();
+
   const [filter, setFilter] = useState('ALL');
   const [reviewing, setReviewing] = useState(null);
+  const [confirmSubmitApp, setConfirmSubmitApp] = useState(null);
 
-  const applications = data ?? [];
+  const stats = useMemo(() => {
+    const total = applications.length;
+    const applied = applications.filter((a) => a.status === 'APPLIED').length;
+    const ready = applications.filter((a) => a.status === 'READY').length;
+    const review = applications.filter((a) => a.status === 'REVIEW').length;
+    return { total, applied, ready, review };
+  }, [applications]);
+
   const items = applications.filter((a) => filter === 'ALL' || a.status === filter);
 
-  const countByStatus = applications.reduce((acc, a) => {
-    acc[a.status] = (acc[a.status] || 0) + 1;
-    return acc;
-  }, {});
-
-  const reviewCount = countByStatus.REVIEW || 0;
+  const handleSubmitVerified = async () => {
+    if (!confirmSubmitApp) return;
+    try {
+      await submitApp(confirmSubmitApp.id).unwrap();
+      toast.success(`Application submitted to ${confirmSubmitApp.company}!`);
+      setConfirmSubmitApp(null);
+      refetch();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
-        title="Applications"
-        description="Track automated submissions and resolve screener questions in the human review queue."
+        title="Application Tracker"
+        description="Verify prepared forms, review automation logs, and execute verified submissions on Dice."
+        action={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              icon={RefreshCw}
+              loading={isFetching}
+              onClick={() => refetch()}
+            >
+              Refresh
+            </Button>
+            <Button variant="secondary" icon={Compass} onClick={() => navigate('/jobs')}>
+              Jobs Explorer
+            </Button>
+          </div>
+        }
       />
 
-      {reviewCount > 0 && (
-        <div className="mb-5 flex items-center justify-between rounded-control border border-amber/30 bg-amber-soft/40 p-4">
-          <div className="flex items-center gap-2.5">
-            <HelpCircle className="size-5 text-amber" />
-            <div>
-              <p className="text-sm font-medium text-ink">
-                {reviewCount} application{reviewCount === 1 ? '' : 's'} paused waiting for your answers
-              </p>
-              <p className="text-xs text-ink-soft">
-                The application wizard found unmapped employer screener questions. Answer them to continue.
-              </p>
-            </div>
-          </div>
-          <Button size="sm" onClick={() => setFilter('REVIEW')}>
-            View Review Queue ({reviewCount})
-          </Button>
-        </div>
-      )}
+      {/* Top 4 Stat Cards matching Screenshot 3 */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Card className="p-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+            Total Applications
+          </p>
+          <p className="mt-2 font-serif text-3xl font-medium tabular-nums">{stats.total}</p>
+        </Card>
+        <Card className="p-5 border-emerald-500/20 bg-emerald-500/10">
+          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+            Submitted (Applied)
+          </p>
+          <p className="mt-2 font-serif text-3xl font-medium tabular-nums text-emerald-800 dark:text-emerald-300">
+            {stats.applied}
+          </p>
+        </Card>
+        <Card className="p-5 border-blue-500/20 bg-blue-500/10">
+          <p className="text-xs font-semibold uppercase tracking-wider text-blue-800 dark:text-blue-300">
+            Ready to Submit
+          </p>
+          <p className="mt-2 font-serif text-3xl font-medium tabular-nums text-blue-800 dark:text-blue-300">
+            {stats.ready}
+          </p>
+        </Card>
+        <Card className="p-5 border-amber/20 bg-amber-soft/40">
+          <p className="text-xs font-semibold uppercase tracking-wider text-amber">
+            Needs Review
+          </p>
+          <p className="mt-2 font-serif text-3xl font-medium tabular-nums text-amber">
+            {stats.review}
+          </p>
+        </Card>
+      </div>
 
-      <div className="mb-5 flex flex-wrap gap-2">
+      {/* Filter Tabs */}
+      <div className="flex flex-wrap gap-2">
         {BASE_FILTERS.map(([v, l]) => {
-          const count = v === 'ALL' ? applications.length : countByStatus[v] || 0;
+          const count = v === 'ALL' ? applications.length : applications.filter((a) => a.status === v).length;
           return (
-            <Chip
-              key={v}
-              active={filter === v}
-              onClick={() => setFilter(v)}
-            >
+            <Chip key={v} active={filter === v} onClick={() => setFilter(v)}>
               {l} {count > 0 ? `(${count})` : ''}
             </Chip>
           );
         })}
       </div>
 
+      {/* Applications List */}
       <div className="space-y-3">
         {isLoading ? (
           [0, 1, 2].map((i) => <Skeleton key={i} className="h-24" />)
         ) : items.length ? (
-          items.map((a) => <Row key={a.id} app={a} onReview={setReviewing} />)
+          items.map((a) => (
+            <ApplicationRow
+              key={a.id}
+              app={a}
+              onReview={setReviewing}
+              onSubmitConfirm={setConfirmSubmitApp}
+            />
+          ))
         ) : (
           <EmptyState
             icon={ListChecks}
-            title={filter === 'ALL' ? 'No applications yet' : 'Nothing here'}
-            description="Applications you start from a job board show up here with live progress."
+            title="No applications tracked yet"
+            description="Go to the Jobs Explorer and click 'Prepare Apply' or 'Apply' on any matched job."
+            action={
+              <Button icon={Compass} onClick={() => navigate('/jobs')}>
+                Go to Jobs Explorer
+              </Button>
+            }
           />
         )}
       </div>
 
-      <ReviewModal key={reviewing?.id} application={reviewing} onClose={() => setReviewing(null)} />
+      {/* Review Modal */}
+      <ReviewModal
+        key={reviewing?.id}
+        application={reviewing}
+        onClose={() => {
+          setReviewing(null);
+          refetch();
+        }}
+      />
+
+      {/* Submission Protection Confirmation Modal */}
+      <Modal
+        open={Boolean(confirmSubmitApp)}
+        onClose={() => setConfirmSubmitApp(null)}
+        title="Execute Final Submission?"
+        description={`Submit application for ${confirmSubmitApp?.job_title} at ${confirmSubmitApp?.company}?`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmSubmitApp(null)}>
+              Cancel
+            </Button>
+            <Button icon={Send} loading={submitting} onClick={handleSubmitVerified}>
+              Confirm & Submit to Dice
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-ink-soft leading-relaxed">
+          The Playwright automation agent will open your authenticated session, attach the matched candidate resume, and execute the final submission step on Dice.com.
+        </p>
+      </Modal>
     </div>
   );
 }
