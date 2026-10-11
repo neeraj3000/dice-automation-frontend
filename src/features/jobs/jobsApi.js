@@ -1,4 +1,5 @@
 import { api } from '../../app/api';
+import { normalizeApp } from '../applications/applicationsApi';
 
 export const jobsApi = api.injectEndpoints({
   endpoints: (b) => ({
@@ -37,6 +38,7 @@ export const jobsApi = api.injectEndpoints({
         method: 'POST',
         body: { job_id, resume_id },
       }),
+      transformResponse: normalizeApp,
       invalidatesTags: (_r, _e, { job_id }) => [
         { type: 'Job', id: job_id },
         { type: 'Job', id: 'LIST' },

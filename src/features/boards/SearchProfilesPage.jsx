@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import {
   Bookmark,
   Briefcase,
@@ -50,20 +50,32 @@ export default function SearchProfilesPage() {
   const [deleteProfile] = useDeleteSearchProfileMutation();
   const [runProfile] = useRunSearchProfileMutation();
 
+  const formId = useId();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState(null);
   const [runningId, setRunningId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
 
-  // Form State
-  const [name, setName] = useState('');
-  const [keywords, setKeywords] = useState('');
-  const [location, setLocation] = useState('United States');
-  const [radius, setRadius] = useState(30);
-  const [workSettings, setWorkSettings] = useState(['Remote']);
-  const [employmentTypes, setEmploymentTypes] = useState(['FULLTIME', 'CONTRACTS']);
-  const [postedWithin, setPostedWithin] = useState('ONE');
-  const [easyApplyOnly, setEasyApplyOnly] = useState(true);
+  // Form State — single object to minimise re-renders and focus disruption
+  const DEFAULTS = {
+    name: '',
+    keywords: '',
+    location: 'United States',
+    radius: 30,
+    workSettings: ['Remote'],
+    employmentTypes: ['FULLTIME', 'CONTRACTS'],
+    postedWithin: 'ONE',
+    easyApplyOnly: true,
+  };
+  const [form, setForm] = useState(DEFAULTS);
+  const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  const toggleArray = (key, item) =>
+    setForm((prev) => ({
+      ...prev,
+      [key]: prev[key].includes(item)
+        ? prev[key].filter((x) => x !== item)
+        : [...prev[key], item],
+    }));
 
   const stats = useMemo(() => {
     const total = profiles.length;
@@ -75,38 +87,30 @@ export default function SearchProfilesPage() {
   const handleOpenDialog = (p = null) => {
     if (p) {
       setEditingProfile(p);
-      setName(p.name || '');
-      setKeywords(Array.isArray(p.keywords) ? p.keywords.join(', ') : p.keywords || '');
-      setLocation(p.location || 'United States');
-      setRadius(p.radius || 30);
-      setWorkSettings(p.work_settings || ['Remote']);
-      setEmploymentTypes(p.employment_types || ['FULLTIME', 'CONTRACTS']);
-      setPostedWithin(p.posted_within || 'ONE');
-      setEasyApplyOnly(p.easy_apply_only !== false);
+      setForm({
+        name: p.name || '',
+        keywords: Array.isArray(p.keywords) ? p.keywords.join(', ') : p.keywords || '',
+        location: p.location || 'United States',
+        radius: p.radius || 30,
+        workSettings: p.work_settings || ['Remote'],
+        employmentTypes: p.employment_types || ['FULLTIME', 'CONTRACTS'],
+        postedWithin: p.posted_within || 'ONE',
+        easyApplyOnly: p.easy_apply_only !== false,
+      });
     } else {
       setEditingProfile(null);
-      setName('');
-      setKeywords('');
-      setLocation('United States');
-      setRadius(30);
-      setWorkSettings(['Remote']);
-      setEmploymentTypes(['FULLTIME', 'CONTRACTS']);
-      setPostedWithin('ONE');
-      setEasyApplyOnly(true);
+      setForm(DEFAULTS);
     }
     setDialogOpen(true);
   };
 
-  const toggleArrayItem = (arr, item) =>
-    arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item];
-
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!name.trim()) {
+    if (!form.name.trim()) {
       toast.error('Profile Name is required.');
       return;
     }
-    const kwList = keywords
+    const kwList = form.keywords
       .split(',')
       .map((k) => k.trim())
       .filter(Boolean);
@@ -116,15 +120,15 @@ export default function SearchProfilesPage() {
     }
 
     const payload = {
-      name: name.trim(),
+      name: form.name.trim(),
       keywords: kwList,
-      location: location.trim() || 'United States',
-      radius: Number(radius) || 30,
-      work_settings: workSettings,
-      employment_types: employmentTypes,
-      posted_within: postedWithin,
-      easy_apply_only: easyApplyOnly,
-      is_remote: workSettings.includes('Remote'),
+      location: form.location.trim() || 'United States',
+      radius: Number(form.radius) || 30,
+      work_settings: form.workSettings,
+      employment_types: form.employmentTypes,
+      posted_within: form.postedWithin,
+      easy_apply_only: form.easyApplyOnly,
+      is_remote: form.workSettings.includes('Remote'),
     };
 
     try {
@@ -384,44 +388,52 @@ export default function SearchProfilesPage() {
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button loading={creating || updating} onClick={handleSave}>
-              Save Profile
+            <Button type="submit" form={formId} loading={creating || updating}>
+              {editingProfile ? 'Update Profile' : 'Save Profile'}
             </Button>
           </>
         }
       >
-        <form onSubmit={handleSave} className="space-y-4">
-          <Input
-            label="Profile Name"
-            placeholder="e.g. AI & Data Engineer Roles"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
+        <form id={formId} onSubmit={handleSave} className="space-y-5">
+          {/* Basic Info */}
+          <div className="space-y-4">
+            <Input
+              label="Profile Name"
+              placeholder="e.g. AI & Data Engineer Roles"
+              value={form.name}
+              onChange={(e) => setField('name', e.target.value)}
+              required
+              autoComplete="off"
+            />
 
-          <Input
-            label="Keywords (comma-separated)"
-            placeholder="Databricks, AI Engineer, PySpark, Python"
-            value={keywords}
-            onChange={(e) => setKeywords(e.target.value)}
-            hint="Exact terms passed to the Dice Playwright search scraper"
-            required
-          />
+            <Input
+              label="Keywords"
+              placeholder="Databricks, AI Engineer, PySpark, Python"
+              value={form.keywords}
+              onChange={(e) => setField('keywords', e.target.value)}
+              hint="Comma-separated terms passed to the Dice Playwright search scraper"
+              required
+              autoComplete="off"
+            />
+          </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="sm:col-span-2">
-              <Input
-                label="Location"
-                placeholder="e.g. United States or Austin, TX"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-              />
-            </div>
-            <div>
+          {/* Location */}
+          <div className="pt-1 border-t border-line">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft mb-3">Location & Radius</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="sm:col-span-2">
+                <Input
+                  label="Location"
+                  placeholder="e.g. United States or Austin, TX"
+                  value={form.location}
+                  onChange={(e) => setField('location', e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
               <Select
-                label="Radius"
-                value={radius}
-                onChange={(e) => setRadius(Number(e.target.value))}
+                label="Search Radius"
+                value={form.radius}
+                onChange={(e) => setField('radius', Number(e.target.value))}
               >
                 <option value={10}>10 miles</option>
                 <option value={30}>30 miles</option>
@@ -431,57 +443,63 @@ export default function SearchProfilesPage() {
             </div>
           </div>
 
-          <div>
-            <p className="text-[13px] font-medium mb-1.5">Dice Work Settings</p>
-            <div className="flex flex-wrap gap-2">
-              {WORK_SETTINGS_OPTIONS.map((setting) => (
-                <Chip
-                  key={setting}
-                  active={workSettings.includes(setting)}
-                  onClick={() => setWorkSettings(toggleArrayItem(workSettings, setting))}
-                >
-                  {setting}
-                </Chip>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Select
-              label="Posted Date (Dice)"
-              value={postedWithin}
-              onChange={(e) => setPostedWithin(e.target.value)}
-            >
-              {POSTED_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </Select>
+          {/* Dice Filters */}
+          <div className="pt-1 border-t border-line space-y-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">Dice Filters</p>
 
             <div>
-              <p className="text-[13px] font-medium mb-1.5">Employment Types</p>
-              <div className="flex flex-wrap gap-1.5">
-                {EMPLOYMENT_OPTIONS.map((emp) => (
+              <p className="text-[13px] font-medium mb-2">Work Settings</p>
+              <div className="flex flex-wrap gap-2">
+                {WORK_SETTINGS_OPTIONS.map((setting) => (
                   <Chip
-                    key={emp.value}
-                    active={employmentTypes.includes(emp.value)}
-                    onClick={() => setEmploymentTypes(toggleArrayItem(employmentTypes, emp.value))}
+                    key={setting}
+                    active={form.workSettings.includes(setting)}
+                    onClick={() => toggleArray('workSettings', setting)}
                   >
-                    {emp.label}
+                    {setting}
                   </Chip>
                 ))}
               </div>
             </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Select
+                label="Posted Date"
+                value={form.postedWithin}
+                onChange={(e) => setField('postedWithin', e.target.value)}
+              >
+                {POSTED_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </Select>
+
+              <div>
+                <p className="text-[13px] font-medium mb-2">Employment Types</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {EMPLOYMENT_OPTIONS.map((emp) => (
+                    <Chip
+                      key={emp.value}
+                      active={form.employmentTypes.includes(emp.value)}
+                      onClick={() => toggleArray('employmentTypes', emp.value)}
+                    >
+                      {emp.label}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="rounded-control border border-line bg-paper-sunken p-3.5 space-y-2">
+          {/* Easy Apply */}
+          <div className="rounded-control border border-signal/20 bg-signal-soft/30 p-3.5">
             <Toggle
-              checked={easyApplyOnly}
-              onChange={(v) => setEasyApplyOnly(v)}
+              checked={form.easyApplyOnly}
+              onChange={(v) => setField('easyApplyOnly', v)}
               label="Easy Apply Only (Dice Application Wizard)"
               description={
-                easyApplyOnly
+                form.easyApplyOnly
                   ? 'Recommended: Scrapes only jobs with the Dice built-in application wizard for automated 1-click apply.'
                   : 'Filters and scrapes company-direct / external links (requires manual submission).'
               }

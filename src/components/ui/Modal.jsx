@@ -5,14 +5,30 @@ import { cn } from '../../lib/cn';
 
 export default function Modal({ open, onClose, title, description, children, footer, wide }) {
   const ref = useRef(null);
+  const didFocusRef = useRef(false);
+
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open) {
+      didFocusRef.current = false;
+      return undefined;
+    }
     const onKey = (e) => e.key === 'Escape' && onClose();
     document.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    ref.current?.focus();
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+    // Only steal focus once on open, and only if no input/select/textarea is already focused
+    if (!didFocusRef.current) {
+      didFocusRef.current = true;
+      const active = document.activeElement;
+      const isInteractive = active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName);
+      if (!isInteractive) {
+        ref.current?.focus();
+      }
+    }
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
   }, [open, onClose]);
 
   return (

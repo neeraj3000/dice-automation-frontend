@@ -1,39 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  AlertCircle,
   Briefcase,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
-  Eye,
   FileText,
-  Filter,
+  Loader2,
   MapPin,
   Play,
-  Plus,
   RefreshCw,
   Search,
   SlidersHorizontal,
   Sparkles,
   StopCircle,
   Trash2,
-  Users,
-  Wallet,
   X,
   Zap,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { Card, CardBody, CardHeader } from '../../components/ui/Card';
+import { Card } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
-import { Input, Select } from '../../components/ui/Field';
-import { Chip, EmptyState, PageHeader, Skeleton, Toggle } from '../../components/ui/Misc';
+import { PageHeader, Skeleton } from '../../components/ui/Misc';
 import { cn } from '../../lib/cn';
-import { errorMessage, timeAgo } from '../../lib/format';
+import { errorMessage } from '../../lib/format';
 import { useDebounce } from '../../hooks/useDebounce';
 import {
   useAnalyzeJobMutation,
@@ -49,6 +43,165 @@ import { useGetResumesQuery } from '../resumes/resumesApi';
 import DirectMatchModal from './DirectMatchModal';
 
 const PAGE_SIZE = 10;
+
+// Shared column template so the header and every row line up.
+const ROW_GRID = 'lg:grid-cols-[minmax(0,1fr)_200px_130px_200px] lg:items-center lg:gap-6';
+const FIELD =
+  'h-10 rounded-control border border-line-strong bg-paper-raised text-sm text-ink placeholder:text-ink-soft/70 transition-colors focus:border-signal focus:outline-none focus:ring-2 focus:ring-signal/15';
+
+function SelectField({ value, onChange, className, children }) {
+  return (
+    <div className={cn('relative w-full', className)}>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(FIELD, 'w-full cursor-pointer appearance-none pl-3.5 pr-9')}
+      >
+        {children}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft" />
+    </div>
+  );
+}
+
+const jobScore = (job) => job.match?.score ?? job.match_result?.match_percentage ?? null;
+
+function JobStatus({ job, score }) {
+  if (job.status === 'APPLIED') return <Badge tone="signal" dot>Applied</Badge>;
+  if (job.status === 'REVIEW') return <Badge tone="amber" dot>In review</Badge>;
+  if (job.status === 'FAILED') {
+    return (
+      <div className="min-w-0">
+        <Badge tone="rust" dot>Failed</Badge>
+        {job.failure_reason && (
+          <p className="mt-1 truncate text-[11px] text-rust/90" title={job.failure_reason}>
+            {job.failure_reason}
+          </p>
+        )}
+      </div>
+    );
+  }
+  return <Badge tone="neutral">{score !== null ? 'Matched' : 'New'}</Badge>;
+}
+
+function MatchCell({ score, resumeName }) {
+  if (score === null && !resumeName) return <span className="text-xs text-ink-soft/70">Not evaluated</span>;
+  const bar = score >= 70 ? 'bg-signal' : score >= 40 ? 'bg-amber' : 'bg-rust';
+  return (
+    <div className="min-w-0 space-y-1.5">
+      {score !== null && (
+        <div className="flex items-center gap-2.5">
+          <span className="w-9 text-sm font-semibold tabular-nums text-ink">{score}%</span>
+          <div className="h-1 flex-1 overflow-hidden rounded-full bg-line">
+            <div className={cn('h-full rounded-full', bar)} style={{ width: `${Math.min(100, score)}%` }} />
+          </div>
+        </div>
+      )}
+      {resumeName && (
+        <p className="flex items-center gap-1.5 text-xs text-ink-soft" title={resumeName}>
+          <FileText className="size-3.5 shrink-0" />
+          <span className="truncate">{resumeName}</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+function JobRow({ job, resumes, busy, onApply, onView }) {
+  const score = jobScore(job);
+  const resumeName =
+    job.match_result?.recommended_resume_name ||
+    job.match?.resume_name ||
+    (job.match?.resume_id && resumes.find((r) => r.id === job.match.resume_id)?.file_name) ||
+    null;
+  const isApplied = job.status === 'APPLIED';
+  const listingUrl = job.url || job.job_url;
+  const company = job.company || 'Company not listed';
+  const location = job.location || 'Remote';
+  const extras = [job.employment_type, job.salary, job.posted_date].filter(Boolean);
+
+  return (
+    <li className={cn(ROW_GRID, 'grid gap-4 px-5 py-4 transition-colors hover:bg-paper-sunken/40')}>
+      {/* Role */}
+      <div className="flex min-w-0 gap-3.5">
+        <span
+          aria-hidden
+          className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-[10px] border border-line bg-paper-sunken font-serif text-base font-medium text-ink-soft"
+        >
+          {company.trim()[0]?.toUpperCase()}
+        </span>
+        <div className="min-w-0">
+          <button
+            type="button"
+            onClick={() => onView(job)}
+            title={job.title}
+            className="line-clamp-2 text-left text-[15px] font-semibold leading-snug text-ink transition-colors hover:text-signal"
+          >
+            {job.title}
+          </button>
+          <p className="mt-0.5 truncate text-sm text-ink-soft">{company}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-soft">
+            <span className="inline-flex items-center gap-1">
+              <MapPin className="size-3.5" />
+              {location}
+            </span>
+            {extras.map((m) => (
+              <span key={m}>· {m}</span>
+            ))}
+            {job.work_setting && job.work_setting !== location && (
+              <span className="rounded-full border border-line px-2 py-px text-[11px]">{job.work_setting}</span>
+            )}
+            {job.is_easy_apply && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-signal/25 px-2 py-px text-[11px] text-signal">
+                <Zap className="size-3" />
+                Easy Apply
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Match */}
+      <div className="min-w-0 pl-[54px] lg:pl-0">
+        <MatchCell score={score} resumeName={resumeName} />
+      </div>
+
+      {/* Status */}
+      <div className="min-w-0 pl-[54px] lg:pl-0">
+        <JobStatus job={job} score={score} />
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1.5 pl-[54px] lg:justify-end lg:pl-0">
+        {isApplied ? (
+          <span className="inline-flex h-8 items-center gap-1.5 px-2 text-[13px] font-medium text-signal">
+            <CheckCircle2 className="size-4" />
+            Applied
+          </span>
+        ) : (
+          <Button size="sm" loading={busy} onClick={() => onApply(job)}>
+            {job.status === 'FAILED' ? 'Retry' : 'Apply'}
+          </Button>
+        )}
+        <Button size="sm" variant="secondary" onClick={() => onView(job)}>
+          Details
+        </Button>
+        {listingUrl && (
+          <a
+            href={listingUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            title="Open on Dice"
+            aria-label="Open listing on Dice"
+            className="grid size-8 place-items-center rounded-control text-ink-soft transition-colors hover:bg-paper-sunken hover:text-ink"
+          >
+            <ExternalLink className="size-4" />
+          </a>
+        )}
+      </div>
+    </li>
+  );
+}
 
 export default function JobsPage() {
   const navigate = useNavigate();
@@ -274,108 +427,85 @@ export default function JobsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Jobs Explorer & Matcher"
-        description="Scrape Dice jobs, analyze requirements, and evaluate candidate resume match fit."
+        title="Jobs"
+        description="Scraped Dice listings, matched against your resume library."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Button
-              variant="secondary"
+              variant="ghost"
               icon={RefreshCw}
               loading={isFetching}
               onClick={() => refetch()}
-            >
-              Refresh
-            </Button>
+              aria-label="Refresh jobs"
+              title="Refresh"
+              className="px-2.5"
+            />
             {jobsList.length > 0 && (
-              <Button
-                variant="ghost"
-                icon={Trash2}
-                onClick={() => setConfirmClearOpen(true)}
-              >
+              <Button variant="ghost" icon={Trash2} onClick={() => setConfirmClearOpen(true)}>
                 Clear
               </Button>
             )}
-            <Button
-              variant="secondary"
-              icon={Sparkles}
-              onClick={() => setDirectMatchOpen(true)}
-            >
-              Paste & Match JD
+            <Button variant="secondary" icon={Sparkles} onClick={() => setDirectMatchOpen(true)}>
+              Match a JD
             </Button>
             <Button
               icon={Zap}
               disabled={applyAllState.isActive || unappliedOnPage.length === 0}
               onClick={handleApplyAll}
             >
-              Apply All ({unappliedOnPage.length})
+              Apply to {unappliedOnPage.length}
             </Button>
           </div>
         }
       />
 
-      {/* Metrics Summary Strip */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Card className="p-4 sm:p-5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Total Scraped</span>
-            <Briefcase className="size-4 text-signal" />
+      {/* Summary strip */}
+      <Card className="grid grid-cols-3 divide-x divide-line">
+        {[
+          ['Jobs found', totalCount],
+          ['Not applied on this page', unappliedOnPage.length],
+          ['Search profiles', profiles.length],
+        ].map(([label, value]) => (
+          <div key={label} className="px-4 py-3.5 sm:px-6">
+            <p className="font-serif text-2xl font-medium tabular-nums text-ink">{value}</p>
+            <p className="mt-0.5 text-xs text-ink-soft">{label}</p>
           </div>
-          <p className="mt-2 text-2xl font-bold font-serif text-ink tabular-nums">{totalCount}</p>
-          <p className="mt-0.5 text-xs text-ink-soft">Dice jobs currently cached</p>
-        </Card>
+        ))}
+      </Card>
 
-        <Card className="p-4 sm:p-5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Ready To Apply</span>
-            <Zap className="size-4 text-amber" />
-          </div>
-          <p className="mt-2 text-2xl font-bold font-serif text-ink tabular-nums">{unappliedOnPage.length}</p>
-          <p className="mt-0.5 text-xs text-ink-soft">Unapplied on this page</p>
-        </Card>
-
-        <Card className="p-4 sm:p-5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Search Profiles</span>
-            <SlidersHorizontal className="size-4 text-signal" />
-          </div>
-          <p className="mt-2 text-2xl font-bold font-serif text-ink tabular-nums">{profiles.length}</p>
-          <p className="mt-0.5 text-xs text-ink-soft">Active Dice query profiles</p>
-        </Card>
-      </div>
-
-      {/* Batch Application Progress Banner */}
+      {/* Batch application progress */}
       {applyAllState.isActive && (
-        <Card className="border-signal/40 bg-signal-soft/50 p-4">
+        <Card className="border-signal/30 bg-signal-soft/40 px-5 py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 font-medium text-ink">
-                <Zap className="size-4 text-signal animate-pulse" />
-                <span>
-                  Applying ({applyAllState.currentIndex}/{applyAllState.totalJobs}):{' '}
-                  <strong>{applyAllState.currentTitle}</strong> at <strong>{applyAllState.currentCompany}</strong>
+            <div className="min-w-0 space-y-1.5">
+              <p className="flex items-center gap-2 text-sm text-ink">
+                <Loader2 className="size-4 shrink-0 animate-spin text-signal" />
+                <span className="truncate">
+                  Applying {applyAllState.currentIndex} of {applyAllState.totalJobs} ·{' '}
+                  <span className="font-medium">{applyAllState.currentTitle}</span>
+                  <span className="text-ink-soft"> at {applyAllState.currentCompany}</span>
                 </span>
+              </p>
+              <div className="h-1 w-full max-w-sm overflow-hidden rounded-full bg-line">
+                <div
+                  className="h-full rounded-full bg-signal transition-all duration-500"
+                  style={{ width: `${(applyAllState.currentIndex / Math.max(1, applyAllState.totalJobs)) * 100}%` }}
+                />
               </div>
-              <div className="flex items-center gap-4 text-xs text-ink-soft">
-                <span>Applied: <strong className="text-signal">{applyAllState.appliedCount}</strong></span>
-                <span>Review: <strong className="text-amber">{applyAllState.reviewCount}</strong></span>
-                <span>Failed: <strong className="text-rust">{applyAllState.failedCount}</strong></span>
-              </div>
+              <p className="text-xs text-ink-soft">
+                {applyAllState.appliedCount} applied · {applyAllState.reviewCount} need review ·{' '}
+                {applyAllState.failedCount} failed
+              </p>
             </div>
-            <Button
-              variant="danger"
-              size="sm"
-              icon={StopCircle}
-              onClick={handleStopBatch}
-            >
-              Stop Batch
+            <Button variant="secondary" size="sm" icon={StopCircle} onClick={handleStopBatch}>
+              Stop
             </Button>
           </div>
         </Card>
       )}
 
-      {/* Sleek Integrated Filter Bar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        {/* Search Input */}
+      {/* Filters */}
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft" />
           <input
@@ -384,306 +514,158 @@ export default function JobsPage() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            placeholder="Search by job title, company, or keyword…"
-            className="h-10 w-full rounded-control border border-line-strong bg-paper-raised pl-9 pr-9 text-sm focus:border-signal focus:outline-none focus:ring-2 focus:ring-signal/20 transition-all"
+            placeholder="Search title, company, or keyword"
+            className={cn(FIELD, 'w-full pl-9 pr-9')}
           />
           {search && (
             <button
               type="button"
+              aria-label="Clear search"
               onClick={() => {
                 setSearch('');
                 setPage(1);
               }}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-ink-soft hover:text-ink transition-colors"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-ink-soft transition-colors hover:text-ink"
             >
               <X className="size-3.5" />
             </button>
           )}
         </div>
 
-        {/* Profile Dropdown */}
-        <div className="relative w-full sm:w-56">
-          <select
-            value={profileFilter}
-            onChange={(e) => {
-              setProfileFilter(e.target.value);
-              setPage(1);
-            }}
-            className="h-10 w-full appearance-none rounded-control border border-line-strong bg-paper-raised pl-3.5 pr-9 text-sm focus:border-signal focus:outline-none focus:ring-2 focus:ring-signal/20 transition-all cursor-pointer"
-          >
-            <option value="">All Search Profiles ({profiles.length})</option>
-            {profiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft" />
-        </div>
+        <SelectField
+          className="sm:w-52"
+          value={profileFilter}
+          onChange={(v) => {
+            setProfileFilter(v);
+            setPage(1);
+          }}
+        >
+          <option value="">All search profiles</option>
+          {profiles.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </SelectField>
 
-        {/* Status Dropdown */}
-        <div className="relative w-full sm:w-44">
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPage(1);
-            }}
-            className="h-10 w-full appearance-none rounded-control border border-line-strong bg-paper-raised pl-3.5 pr-9 text-sm focus:border-signal focus:outline-none focus:ring-2 focus:ring-signal/20 transition-all cursor-pointer"
-          >
-            <option value="">All Statuses</option>
-            <option value="NEW">New</option>
-            <option value="MATCHED">AI Matched</option>
-            <option value="APPLIED">Applied</option>
-            <option value="REVIEW">Review</option>
-            <option value="FAILED">Failed</option>
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft" />
-        </div>
+        <SelectField
+          className="sm:w-40"
+          value={statusFilter}
+          onChange={(v) => {
+            setStatusFilter(v);
+            setPage(1);
+          }}
+        >
+          <option value="">Any status</option>
+          <option value="NEW">New</option>
+          <option value="MATCHED">Matched</option>
+          <option value="APPLIED">Applied</option>
+          <option value="REVIEW">In review</option>
+          <option value="FAILED">Failed</option>
+        </SelectField>
 
-        {/* Skip Applied Toggle Chip */}
         <button
           type="button"
+          aria-pressed={skipApplied}
           onClick={() => {
             setSkipApplied(!skipApplied);
             setPage(1);
           }}
           className={cn(
-            'inline-flex h-10 items-center justify-center gap-2 rounded-control border px-3.5 text-sm font-medium transition-all shrink-0',
+            'inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-control border px-3.5 text-sm transition-colors',
             skipApplied
-              ? 'border-signal bg-signal-soft text-signal-deep font-semibold shadow-xs'
-              : 'border-line-strong bg-paper-raised text-ink-soft hover:bg-paper-sunken hover:text-ink'
+              ? 'border-signal/40 bg-signal-soft font-medium text-signal-deep'
+              : 'border-line-strong bg-paper-raised text-ink-soft hover:text-ink'
           )}
         >
-          <span className={cn('size-2 rounded-full transition-colors', skipApplied ? 'bg-signal' : 'bg-line-strong')} />
-          <span>Skip Applied</span>
+          {skipApplied ? (
+            <CheckCircle2 className="size-4" />
+          ) : (
+            <span className="size-4 rounded-full border border-line-strong" />
+          )}
+          Hide applied
         </button>
       </div>
 
-      {/* Jobs Table */}
-      <Card>
-        <CardBody className="p-0">
-          {isLoading ? (
-            <div className="p-6 space-y-3">
-              {[0, 1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-20" />
+      {/* Job list */}
+      <Card className="overflow-hidden">
+        {isLoading ? (
+          <div className="space-y-3 p-5">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-16" />
+            ))}
+          </div>
+        ) : jobsList.length === 0 ? (
+          <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+            <div className="mb-4 grid size-12 place-items-center rounded-full bg-signal-soft text-signal">
+              <Briefcase className="size-5" />
+            </div>
+            <h3 className="font-serif text-xl font-medium text-ink">No jobs yet</h3>
+            <p className="mt-1.5 max-w-md text-sm text-ink-soft">
+              Run a search profile to pull listings from Dice, loosen your filters, or paste a job description to match it directly.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <Button icon={Sparkles} onClick={() => setDirectMatchOpen(true)}>
+                Match a JD
+              </Button>
+              <Button variant="secondary" icon={SlidersHorizontal} onClick={() => navigate('/search-profiles')}>
+                Search profiles
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div
+              className={cn(
+                ROW_GRID,
+                'hidden border-b border-line bg-paper-sunken/50 px-5 py-2.5 text-[11px] font-medium uppercase tracking-wider text-ink-soft lg:grid'
+              )}
+            >
+              <span>Role</span>
+              <span>Resume match</span>
+              <span>Status</span>
+              <span className="sr-only">Actions</span>
+            </div>
+            <ul className="divide-y divide-line">
+              {jobsList.map((job) => (
+                <JobRow
+                  key={job.id}
+                  job={job}
+                  resumes={resumes}
+                  busy={actionInProgress === job.id}
+                  onApply={handleApply}
+                  onView={setSelectedJob}
+                />
               ))}
-            </div>
-          ) : jobsList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-              <div className="mb-4 grid size-12 place-items-center rounded-full bg-signal-soft text-signal">
-                <Briefcase className="size-5" />
-              </div>
-              <h3 className="font-serif text-xl font-medium text-ink">No jobs found in queue</h3>
-              <p className="mt-1.5 max-w-md text-sm text-ink-soft">
-                Run a Dice search profile to fetch live matching jobs, clear applied filters, or paste an external job description to evaluate candidates.
-              </p>
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                <Button
-                  icon={Sparkles}
-                  onClick={() => setDirectMatchOpen(true)}
-                >
-                  Paste & Match JD
-                </Button>
-                <Button
-                  variant="secondary"
-                  icon={SlidersHorizontal}
-                  onClick={() => navigate('/search-profiles')}
-                >
-                  Manage Search Profiles
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-line bg-paper-sunken/60 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
-                  <tr>
-                    <th className="py-3 pl-6 pr-4">Job Title & Company</th>
-                    <th className="py-3 px-4">Location</th>
-                    <th className="py-3 px-4 text-center">Resume Match</th>
-                    <th className="py-3 px-4">Recommended Resume</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 pl-4 pr-6 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {jobsList.map((job) => {
-                    const isBusy = actionInProgress === job.id;
-                    const score = job.match?.score || job.match_result?.match_percentage || null;
-                    const recResume =
-                      job.match_result?.recommended_resume_name ||
-                      job.match?.resume_name ||
-                      (job.match?.resume_id &&
-                        resumes.find((r) => r.id === job.match.resume_id)?.file_name) ||
-                      null;
+            </ul>
+          </>
+        )}
 
-                    const isApplied = job.status === 'APPLIED';
-                    const isFailed = job.status === 'FAILED';
-                    const isReview = job.status === 'REVIEW';
-
-                    const tone =
-                      score >= 70 ? 'signal' : score >= 40 ? 'amber' : score !== null ? 'rust' : 'neutral';
-
-                    return (
-                      <tr key={job.id} className="hover:bg-paper-sunken/30 transition-colors">
-                        {/* Title & Company */}
-                        <td className="py-4 pl-6 pr-4 align-top max-w-sm">
-                          <p className="font-semibold text-[15px] text-ink leading-snug">
-                            {job.title}
-                          </p>
-                          <p className="text-xs text-ink-soft mt-0.5">
-                            {job.company || 'Company not specified'}
-                            {job.salary ? ` · ${job.salary}` : ''}
-                          </p>
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {job.work_setting && (
-                              <Badge tone="neutral" className="text-[10px]">
-                                {job.work_setting}
-                              </Badge>
-                            )}
-                            {job.is_easy_apply && (
-                              <Badge tone="signal" className="text-[10px]">
-                                Easy Apply
-                              </Badge>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Location */}
-                        <td className="py-4 px-4 align-top text-ink-soft whitespace-nowrap">
-                          <div className="flex items-center gap-1.5 font-medium text-ink">
-                            <MapPin className="size-3.5 text-ink-soft shrink-0" />
-                            <span>{job.location || 'Remote'}</span>
-                          </div>
-                          {job.work_setting === 'Remote' && (
-                            <span className="text-xs text-signal font-semibold">Remote</span>
-                          )}
-                        </td>
-
-                        {/* Resume Match */}
-                        <td className="py-4 px-4 align-top text-center">
-                          {score !== null ? (
-                            <Badge tone={tone} className="font-bold text-xs">
-                              {score}%
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-ink-soft/60">–</span>
-                          )}
-                        </td>
-
-                        {/* Recommended Resume */}
-                        <td className="py-4 px-4 align-top max-w-xs">
-                          {recResume ? (
-                            <div className="flex items-center gap-1.5 text-xs text-ink font-medium">
-                              <FileText className="size-3.5 text-signal shrink-0" />
-                              <span className="truncate" title={recResume}>
-                                {recResume}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-ink-soft/60">Not evaluated yet</span>
-                          )}
-                        </td>
-
-                        {/* Status */}
-                        <td className="py-4 px-4 align-top">
-                          {isApplied ? (
-                            <Badge tone="signal" dot>
-                              Applied
-                            </Badge>
-                          ) : isFailed ? (
-                            <Badge
-                              tone="rust"
-                              dot
-                              title={job.failure_reason || 'Application submission failed'}
-                            >
-                              Failed
-                            </Badge>
-                          ) : isReview ? (
-                            <Badge tone="amber" dot>
-                              In Review
-                            </Badge>
-                          ) : score !== null ? (
-                            <Badge tone="signal">AI Matched</Badge>
-                          ) : (
-                            <Badge tone="neutral">New</Badge>
-                          )}
-                          {isFailed && job.failure_reason && (
-                            <p className="mt-1 text-[11px] text-rust line-clamp-1" title={job.failure_reason}>
-                              {job.failure_reason}
-                            </p>
-                          )}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="py-4 pl-4 pr-6 align-top text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button
-                              size="sm"
-                              disabled={isApplied}
-                              loading={isBusy}
-                              onClick={() => handleApply(job)}
-                              className="font-semibold text-xs"
-                            >
-                              {isFailed ? 'Re-try' : isApplied ? 'Applied' : 'Apply'}
-                            </Button>
-
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => setSelectedJob(job)}
-                              className="text-xs"
-                            >
-                              View
-                            </Button>
-
-                            {(job.url || job.job_url) && (
-                              <button
-                                type="button"
-                                onClick={() => window.open(job.url || job.job_url, '_blank')}
-                                title="Open listing on Dice"
-                                className="rounded-lg p-1.5 text-ink-soft hover:bg-paper-sunken hover:text-signal transition"
-                              >
-                                <ExternalLink className="size-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-line px-6 py-3.5">
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-line px-5 py-3">
+            <span className="text-xs text-ink-soft">
+              Page {page} of {totalPages} · {totalCount} jobs
+            </span>
+            <div className="flex items-center gap-1.5">
               <Button
                 variant="secondary"
                 size="sm"
                 icon={ChevronLeft}
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <span className="text-xs font-medium text-ink-soft">
-                Page {page} of {totalPages} ({totalCount} total jobs)
-              </span>
+                aria-label="Previous page"
+              />
               <Button
                 variant="secondary"
                 size="sm"
+                icon={ChevronRight}
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
-              >
-                Next <ChevronRight className="size-4 ml-1" />
-              </Button>
+                aria-label="Next page"
+              />
             </div>
-          )}
-        </CardBody>
+          </div>
+        )}
       </Card>
 
       {/* Job Details Modal */}

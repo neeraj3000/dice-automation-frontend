@@ -4,4 +4,26 @@ export const STATUS_META = {
   READY: { label: 'Ready to submit', tone: 'signal' },
   APPLIED: { label: 'Applied', tone: 'signal' },
   FAILED: { label: 'Failed', tone: 'rust' },
+  CANCELLED: { label: 'Stopped', tone: 'neutral' },
 };
+
+// The backend reports fine-grained runner states (QUEUED, SUBMITTING, SUBMITTED, ...);
+// collapse them into the UI buckets above. Anything unknown is treated as failed.
+const UI_STATUS = {
+  APPLIED: 'APPLIED',
+  SUBMITTED: 'APPLIED',
+  READY: 'READY',
+  REVIEW: 'REVIEW',
+  PREPARING: 'PREPARING',
+  PREPARE: 'PREPARING',
+  APPLYING: 'PREPARING',
+  QUEUED: 'PREPARING',
+  STARTING: 'PREPARING',
+  OPENING_JOB: 'PREPARING',
+  FILLING_APPLICATION: 'PREPARING',
+  UPLOADING_RESUME: 'PREPARING',
+  SUBMITTING: 'PREPARING',
+  CANCELLED: 'CANCELLED',
+};
+
+export const uiStatus = (status) => UI_STATUS[status] ?? 'FAILED';

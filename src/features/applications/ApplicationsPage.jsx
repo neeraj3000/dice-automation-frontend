@@ -14,6 +14,7 @@ import {
   Loader2,
   RefreshCw,
   Send,
+  Square,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Card, CardBody } from '../../components/ui/Card';
@@ -25,6 +26,7 @@ import { errorMessage, timeAgo } from '../../lib/format';
 import {
   useGetApplicationsQuery,
   useRetryApplicationMutation,
+  useStopApplicationMutation,
   useSubmitApplicationMutation,
 } from './applicationsApi';
 import { STATUS_META } from './statusMeta';
@@ -37,17 +39,28 @@ const BASE_FILTERS = [
   ['READY', 'Ready to submit'],
   ['APPLIED', 'Applied'],
   ['FAILED', 'Failed'],
+  ['CANCELLED', 'Stopped'],
 ];
 
 function ApplicationRow({ app, onReview, onSubmitConfirm }) {
   const [open, setOpen] = useState(false);
   const [retry, { isLoading: retrying }] = useRetryApplicationMutation();
+  const [stop, { isLoading: stopping }] = useStopApplicationMutation();
   const meta = STATUS_META[app.status] ?? STATUS_META.FAILED;
 
   const handleRetry = async () => {
     try {
       await retry(app.id).unwrap();
       toast.success('Retrying application…');
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+
+  const handleStop = async () => {
+    try {
+      await stop(app.id).unwrap();
+      toast.success('Automation stopped');
     } catch (e) {
       toast.error(errorMessage(e));
     }
@@ -105,7 +118,12 @@ function ApplicationRow({ app, onReview, onSubmitConfirm }) {
               Submit application
             </Button>
           )}
-          {app.status === 'FAILED' && (
+          {app.status === 'PREPARING' && (
+            <Button size="sm" variant="secondary" icon={Square} loading={stopping} onClick={handleStop}>
+              Stop
+            </Button>
+          )}
+          {(app.status === 'FAILED' || app.status === 'CANCELLED') && (
             <Button size="sm" variant="secondary" loading={retrying} onClick={handleRetry}>
               Try again
             </Button>

@@ -23,7 +23,7 @@ import { timeAgo } from '../../lib/format';
 import { useGetStatsQuery } from '../settings/settingsApi';
 import { useGetApplicationsQuery } from '../applications/applicationsApi';
 import { useDice } from '../../context/DiceContext';
-import { STATUS_META } from '../applications/statusMeta';
+import { STATUS_META, uiStatus } from '../applications/statusMeta';
 import DirectMatchModal from '../jobs/DirectMatchModal';
 
 function StatCard({ icon: Icon, label, value, to, badge, iconColor = 'text-signal' }) {
@@ -229,8 +229,8 @@ export default function DashboardPage() {
                       {timeAgo(a.created_at || a.applied_at)}
                     </p>
                   </div>
-                  <Badge tone={STATUS_META[a.status]?.tone} dot>
-                    {STATUS_META[a.status]?.label || a.status}
+                  <Badge tone={STATUS_META[uiStatus(a.status)].tone} dot>
+                    {STATUS_META[uiStatus(a.status)].label}
                   </Badge>
                 </li>
               ))}
