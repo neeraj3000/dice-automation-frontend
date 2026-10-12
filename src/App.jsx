@@ -1,5 +1,6 @@
 import { lazy, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import { Toaster } from 'react-hot-toast';
 import ProtectedRoute from './features/auth/ProtectedRoute';
 import AppShell from './components/layout/AppShell';
@@ -20,10 +21,23 @@ const SettingsPage = lazy(() => import('./features/settings/SettingsPage'));
 export default function App() {
   const [refresh] = useRefreshMutation();
   const { dark } = useTheme();
+  const user = useSelector((s) => s.auth.user);
+  const token = useSelector((s) => s.auth.token);
 
   useEffect(() => {
     refresh();
   }, [refresh]); // restore the session from the httpOnly refresh cookie
+
+  // Synchronize authenticated session with companion extension bridge
+  useEffect(() => {
+    if (user) {
+      try {
+        localStorage.setItem('a2h_user', JSON.stringify(user));
+        if (token) localStorage.setItem('a2h_token', token);
+        window.postMessage({ type: 'APPLY2HIRE_AUTH_SYNC', user, token }, '*');
+      } catch (_) {}
+    }
+  }, [user, token]);
 
   return (
     <DiceProvider>
