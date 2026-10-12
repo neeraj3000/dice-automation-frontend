@@ -1,18 +1,16 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Award,
-  Briefcase,
+  ChevronDown,
   Copy,
   Eye,
-  FileCheck,
   FileText,
+  Loader2,
   Pencil,
   Plus,
   RefreshCw,
   Replace,
   Search,
-  Sparkles,
   Star,
   Trash2,
   UploadCloud,
@@ -20,12 +18,12 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Card } from '../../components/ui/Card';
+import ActionMenu from '../../components/ui/ActionMenu';
 import Button from '../../components/ui/Button';
-import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import TagInput from '../../components/ui/TagInput';
 import { Input, Textarea } from '../../components/ui/Field';
-import { Chip, EmptyState, PageHeader, Skeleton } from '../../components/ui/Misc';
+import { EmptyState, PageHeader, Skeleton } from '../../components/ui/Misc';
 import { cn } from '../../lib/cn';
 import { errorMessage, timeAgo } from '../../lib/format';
 import {
@@ -39,8 +37,15 @@ import {
 } from './resumesApi';
 
 const MAX_MB = 20;
+const VISIBLE_SKILLS = 10;
+const ACCEPT = '.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-function Dropzone({ onFiles, uploading, inputRef }) {
+const customEntries = (r) =>
+  r?.custom_fields && typeof r.custom_fields === 'object' && !Array.isArray(r.custom_fields)
+    ? Object.entries(r.custom_fields)
+    : [];
+
+function Dropzone({ onFiles, uploading, inputRef, compact }) {
   const [over, setOver] = useState(false);
 
   const validateAndPick = (fileList) => {
@@ -60,35 +65,160 @@ function Dropzone({ onFiles, uploading, inputRef }) {
     if (valid.length) onFiles(valid);
   };
 
+  const browse = () => inputRef.current?.click();
+
   return (
     <div
       onDragOver={(e) => { e.preventDefault(); setOver(true); }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => { e.preventDefault(); setOver(false); validateAndPick(Array.from(e.dataTransfer.files || [])); }}
       className={cn(
-        'flex flex-col items-center rounded-card border-2 border-dashed px-6 py-9 text-center transition',
-        over ? 'border-signal bg-signal-soft/50' : 'border-line-strong bg-paper-raised'
+        'rounded-card border border-dashed transition-colors',
+        over ? 'border-signal bg-signal-soft/60' : 'border-line-strong bg-paper-raised/60 hover:border-ink-soft/40',
+        compact ? 'flex items-center gap-4 px-5 py-4' : 'flex flex-col items-center px-6 py-14 text-center'
       )}
     >
-      <div className="mb-3 grid size-12 place-items-center rounded-full bg-signal-soft text-signal">
-        <UploadCloud className="size-5" />
+      <div className={cn('grid shrink-0 place-items-center rounded-xl border border-line bg-paper-raised text-signal shadow-[0_1px_2px_rgb(0_0_0/0.04)]', compact ? 'size-10' : 'mb-4 size-12')}>
+        {uploading ? <Loader2 className="size-5 animate-spin" /> : <UploadCloud className="size-5" />}
       </div>
-      <p className="font-serif text-lg font-medium">{uploading ? 'Processing resume files…' : 'Drop candidate resumes here'}</p>
-      <p className="mt-1 text-sm text-ink-soft max-w-md">
-        Select one or multiple PDF or Word files (up to {MAX_MB} MB each). Automatic text extraction and skill classification.
-      </p>
+      <div className={cn('min-w-0', compact && 'flex-1')}>
+        <p className="text-sm font-medium text-ink">
+          {uploading ? 'Processing your files…' : (
+            <>Drop resumes here, or{' '}
+              <button type="button" onClick={browse} className="text-signal underline-offset-4 hover:underline">browse</button>
+            </>
+          )}
+        </p>
+        <p className="mt-0.5 text-[13px] text-ink-soft">PDF or DOCX, up to {MAX_MB} MB each. Skills are extracted automatically.</p>
+      </div>
+      {!compact && (
+        <Button className="mt-5" variant="secondary" loading={uploading} onClick={browse}>Choose files</Button>
+      )}
       <input
         ref={inputRef}
         type="file"
         multiple
         hidden
-        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        accept={ACCEPT}
         onChange={(e) => { validateAndPick(Array.from(e.target.files || [])); e.target.value = ''; }}
       />
-      <Button className="mt-4" variant="secondary" loading={uploading} onClick={() => inputRef.current?.click()}>
-        Choose file(s)
-      </Button>
     </div>
+  );
+}
+
+function FileTile({ name }) {
+  const ext = (name?.match(/\.(\w+)$/)?.[1] || 'doc').toUpperCase();
+  return (
+    <div className="relative grid h-12 w-10 shrink-0 place-items-end overflow-hidden rounded-lg border border-line bg-paper-sunken pb-1.5">
+      <span className="absolute right-0 top-0 size-3 rounded-bl-md border-b border-l border-line bg-paper-raised" />
+      <span className={cn('w-full text-center text-[9px] font-bold tracking-wider', ext === 'PDF' ? 'text-rust' : 'text-signal')}>{ext}</span>
+    </div>
+  );
+}
+
+function ResumeCard({ r, busy, onPreview, onEdit, onReparse, onReplace, onDefault, onDelete }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const custom = customEntries(r);
+  const skills = Array.isArray(r.skills) ? r.skills : [];
+  const meta = [
+    r.target_role,
+    r.experience_years,
+    r.created_at ? `Added ${timeAgo(r.created_at)}` : null,
+  ].filter(Boolean);
+  const showFileName = r.file_name && r.display_name && r.file_name !== r.display_name;
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.98 }}
+      className={cn('relative', menuOpen && 'z-20')}
+    >
+      <Card className="group p-5 transition-colors hover:border-line-strong sm:p-6">
+        <div className="flex gap-4">
+          <FileTile name={r.file_name} />
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="truncate text-[15px] font-semibold tracking-[-0.01em] text-ink">{r.display_name || r.file_name}</h3>
+                  {r.is_default && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-signal-soft px-2 py-0.5 text-[11px] font-semibold text-signal-deep">
+                      <Star className="size-3 fill-current" /> Default
+                    </span>
+                  )}
+                  {busy && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-soft">
+                      <Loader2 className="size-3 animate-spin" /> {busy}
+                    </span>
+                  )}
+                </div>
+                {meta.length > 0 && (
+                  <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[13px] text-ink-soft">
+                    {meta.map((m, i) => (
+                      <span key={m} className="flex items-center gap-2">
+                        {i > 0 && <span className="size-0.5 rounded-full bg-ink-soft/60" />}
+                        {m}
+                      </span>
+                    ))}
+                  </p>
+                )}
+                {showFileName && <p className="mt-0.5 truncate text-xs text-ink-soft/70">{r.file_name}</p>}
+              </div>
+
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button size="sm" variant="secondary" icon={Eye} onClick={onPreview} className="hidden sm:inline-flex">Preview</Button>
+                <Button size="sm" variant="secondary" icon={Pencil} onClick={onEdit} className="hidden sm:inline-flex">Edit</Button>
+                <ActionMenu
+                  open={menuOpen}
+                  onOpenChange={setMenuOpen}
+                  items={[
+                    { label: 'Preview', icon: Eye, onClick: onPreview, mobileOnly: true },
+                    { label: 'Edit details', icon: Pencil, onClick: onEdit, mobileOnly: true },
+                    { label: 'Re-parse', icon: RefreshCw, onClick: onReparse },
+                    { label: 'Replace file', icon: Replace, onClick: onReplace },
+                    !r.is_default && { label: 'Make default', icon: Star, onClick: onDefault },
+                    'divider',
+                    { label: 'Delete', icon: Trash2, onClick: onDelete, danger: true },
+                  ]}
+                />
+              </div>
+            </div>
+
+            {r.summary && <p className="mt-3 line-clamp-2 max-w-3xl text-sm leading-relaxed text-ink-soft">{r.summary}</p>}
+
+            <div className="mt-4 flex flex-wrap gap-1.5">
+              {skills.slice(0, VISIBLE_SKILLS).map((s) => (
+                <span key={s} className="rounded-md border border-line bg-paper px-2 py-0.5 text-xs font-medium text-ink-soft">{s}</span>
+              ))}
+              {skills.length > VISIBLE_SKILLS && (
+                <button type="button" onClick={onEdit} className="rounded-md px-2 py-0.5 text-xs font-medium text-ink-soft hover:text-signal">
+                  +{skills.length - VISIBLE_SKILLS} more
+                </button>
+              )}
+              {!skills.length && (
+                <button type="button" onClick={onEdit} className="text-[13px] text-amber hover:underline">
+                  No skills detected. Add them manually
+                </button>
+              )}
+            </div>
+
+            {custom.length > 0 && (
+              <dl className="mt-4 flex flex-wrap gap-x-5 gap-y-1 border-t border-line pt-3 text-xs">
+                {custom.map(([k, v]) => (
+                  <div key={k} className="flex gap-1.5">
+                    <dt className="text-ink-soft">{k}</dt>
+                    <dd className="font-medium text-ink">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        </div>
+      </Card>
+    </motion.div>
   );
 }
 
@@ -103,8 +233,8 @@ function PreviewModal({ resume, onClose }) {
       open
       onClose={onClose}
       wide
-      title={resume.file_name || 'Resume Preview'}
-      description={resume.target_role || 'Extracted document'}
+      title={resume.display_name || resume.file_name || 'Resume preview'}
+      description={resume.target_role || undefined}
       footer={
         url ? (
           <a href={url} target="_blank" rel="noreferrer noopener">
@@ -120,22 +250,26 @@ function PreviewModal({ resume, onClose }) {
           className="h-[65dvh] w-full rounded-control border border-line bg-white"
         />
       ) : (
-        <div className="py-12 text-center text-sm text-ink-soft">No preview file URL available for this resume.</div>
+        <div className="py-12 text-center text-sm text-ink-soft">No preview is available for this resume.</div>
       )}
     </Modal>
   );
 }
 
+const EDIT_TABS = [
+  { id: 'details', label: 'Details' },
+  { id: 'custom', label: 'Custom fields' },
+  { id: 'raw', label: 'Raw text' },
+];
+
 function EditModal({ resume, onClose }) {
   const [tab, setTab] = useState('details');
   const [update, { isLoading }] = useUpdateResumeMutation();
 
-  const initialCustom = useMemo(() => {
-    if (resume?.custom_fields && typeof resume.custom_fields === 'object' && !Array.isArray(resume.custom_fields)) {
-      return Object.entries(resume.custom_fields).map(([key, value]) => ({ key, value: String(value ?? '') }));
-    }
-    return [];
-  }, [resume]);
+  const initialCustom = useMemo(
+    () => customEntries(resume).map(([key, value]) => ({ key, value: String(value ?? '') })),
+    [resume]
+  );
 
   const [form, setForm] = useState(() => ({
     target_role: resume?.target_role ?? '',
@@ -191,8 +325,8 @@ function EditModal({ resume, onClose }) {
       open
       onClose={onClose}
       wide
-      title="Edit resume details"
-      description="Refine extracted candidate attributes or add custom screening metadata."
+      title="Edit resume"
+      description={resume?.display_name || resume?.file_name}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -201,25 +335,43 @@ function EditModal({ resume, onClose }) {
       }
     >
       <div className="space-y-5">
-        <div className="flex gap-2 border-b border-line pb-3">
-          <Chip active={tab === 'details'} onClick={() => setTab('details')}>Details & Skills</Chip>
-          <Chip active={tab === 'custom'} onClick={() => setTab('custom')}>Custom Metadata ({form.custom_fields.length})</Chip>
-          <Chip active={tab === 'raw'} onClick={() => setTab('raw')}>Raw Text</Chip>
+        <div className="flex gap-5 border-b border-line" role="tablist">
+          {EDIT_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => setTab(t.id)}
+              className={cn(
+                'relative -mb-px flex items-center gap-1.5 pb-2.5 text-[13px] font-medium transition-colors',
+                tab === t.id ? 'text-ink' : 'text-ink-soft hover:text-ink'
+              )}
+            >
+              {t.label}
+              {t.id === 'custom' && form.custom_fields.length > 0 && (
+                <span className="rounded-full bg-paper-sunken px-1.5 text-[11px] tabular-nums text-ink-soft">{form.custom_fields.length}</span>
+              )}
+              {tab === t.id && <motion.span layoutId="resume-edit-tab" className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-signal" />}
+            </button>
+          ))}
         </div>
 
         {tab === 'details' && (
           <div className="space-y-4">
-            <Input label="Target role" value={form.target_role} onChange={(e) => setForm({ ...form, target_role: e.target.value })} />
-            <Input label="Experience" placeholder="8+ years" value={form.experience_years} onChange={(e) => setForm({ ...form, experience_years: e.target.value })} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input label="Target role" placeholder="Senior Frontend Engineer" value={form.target_role} onChange={(e) => setForm({ ...form, target_role: e.target.value })} />
+              <Input label="Experience" placeholder="8+ years" value={form.experience_years} onChange={(e) => setForm({ ...form, experience_years: e.target.value })} />
+            </div>
             <TagInput label="Skills" value={form.skills} onChange={(skills) => setForm({ ...form, skills })} />
             <Textarea label="Summary" value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} />
           </div>
         )}
 
         {tab === 'custom' && (
-          <div className="space-y-4">
-            <p className="text-xs text-ink-soft">
-              Attach custom attributes for recruiter filtering and screening (e.g., Security Clearance, Hourly Rate, Preferred Work Mode).
+          <div className="space-y-3">
+            <p className="text-[13px] text-ink-soft">
+              Add your own attributes for filtering and screening, such as security clearance, hourly rate or preferred work mode.
             </p>
             {form.custom_fields.map((cf, idx) => (
               <div key={idx} className="flex items-center gap-2">
@@ -236,28 +388,23 @@ function EditModal({ resume, onClose }) {
                 <button
                   type="button"
                   onClick={() => removeCustomField(idx)}
-                  className="rounded-lg p-2 text-ink-soft hover:bg-rust-soft hover:text-rust"
+                  aria-label={`Remove ${cf.key}`}
+                  className="grid size-9 shrink-0 place-items-center rounded-lg text-ink-soft hover:bg-rust-soft hover:text-rust"
                 >
                   <X className="size-4" />
                 </button>
               </div>
             ))}
-            <div className="flex items-center gap-2 pt-2">
+            <div className="flex items-center gap-2 rounded-control border border-dashed border-line-strong p-2">
+              <Input placeholder="Field name" value={newKey} onChange={(e) => setNewKey(e.target.value)} className="w-1/3" />
               <Input
-                placeholder="Field name (e.g. clearance)"
-                value={newKey}
-                onChange={(e) => setNewKey(e.target.value)}
-                className="w-1/3"
-              />
-              <Input
-                placeholder="Value (e.g. Secret)"
+                placeholder="Value"
                 value={newVal}
                 onChange={(e) => setNewVal(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomField(); } }}
                 className="flex-1"
               />
-              <Button variant="secondary" icon={Plus} size="sm" onClick={addCustomField}>
-                Add
-              </Button>
+              <Button variant="secondary" icon={Plus} onClick={addCustomField} disabled={!newKey.trim()}>Add</Button>
             </div>
           </div>
         )}
@@ -265,11 +412,11 @@ function EditModal({ resume, onClose }) {
         {tab === 'raw' && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-ink-soft">Extracted plain text content from parsed file</span>
+              <span className="text-[13px] text-ink-soft">Plain text extracted from the file</span>
               <Button size="sm" variant="secondary" icon={Copy} onClick={copyRawText}>Copy</Button>
             </div>
-            <pre className="max-h-80 overflow-y-auto rounded-control border border-line bg-paper-sunken p-3 text-xs leading-relaxed text-ink-soft whitespace-pre-wrap">
-              {resume?.raw_text || 'No raw text parsed for this document.'}
+            <pre className="max-h-80 overflow-y-auto whitespace-pre-wrap rounded-control border border-line bg-paper-sunken p-4 font-mono text-xs leading-relaxed text-ink-soft">
+              {resume?.raw_text || 'No text was extracted from this document.'}
             </pre>
           </div>
         )}
@@ -278,13 +425,22 @@ function EditModal({ resume, onClose }) {
   );
 }
 
+function Stat({ label, value }) {
+  return (
+    <div className="px-4 py-4 sm:px-6">
+      <p className="text-xs font-medium text-ink-soft">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tracking-[-0.02em] text-ink tabular-nums">{value}</p>
+    </div>
+  );
+}
+
 export default function ResumesPage() {
-  const { data: resumes, isLoading, refetch } = useGetResumesQuery();
+  const { data: resumes, isLoading, isFetching, refetch } = useGetResumesQuery();
   const [upload, { isLoading: uploading }] = useUploadResumeMutation();
   const [replaceResume, { isLoading: replacing }] = useReplaceResumeMutation();
   const [reparseResume] = useReparseResumeMutation();
   const [setDefault] = useSetDefaultResumeMutation();
-  const [remove] = useDeleteResumeMutation();
+  const [remove, { isLoading: deleting }] = useDeleteResumeMutation();
 
   const [preview, setPreview] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -321,6 +477,10 @@ export default function ResumesPage() {
       }
     });
     return set.size;
+  }, [resumeList]);
+
+  const parsedResumesCount = useMemo(() => {
+    return resumeList.filter((r) => Array.isArray(r?.skills) && r.skills.length > 0).length;
   }, [resumeList]);
 
   const filteredResumes = useMemo(() => {
@@ -386,7 +546,7 @@ export default function ResumesPage() {
     setActiveReparseId(id);
     try {
       await reparseResume(id).unwrap();
-      toast.success('Resume re-parsed with ATS engine');
+      toast.success('Resume re-parsed');
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
@@ -394,190 +554,157 @@ export default function ResumesPage() {
     }
   };
 
+  const handleSetDefault = async (id) => {
+    try {
+      await setDefault(id).unwrap();
+      toast.success('Default resume updated');
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+
+  const hasResumes = resumeList.length > 0;
+  const filtering = !!(search || roleFilter);
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Resume Library"
-        description="Manage candidate resumes, ATS skill extractions, and metadata for automated job matching."
+        description="Your resumes, their extracted skills, and the details used to match you with jobs."
         action={
           <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              icon={RefreshCw}
+            <button
+              type="button"
               onClick={() => refetch()}
+              aria-label="Refresh"
+              title="Refresh"
+              className="grid size-10 place-items-center rounded-control border border-line-strong bg-paper-raised text-ink-soft shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition hover:bg-paper-sunken hover:text-ink"
             >
-              Refresh
-            </Button>
-            <Button
-              icon={UploadCloud}
-              onClick={() => dropzoneInputRef.current?.click()}
-            >
-              Upload Resumes
+              <RefreshCw className={cn('size-4', isFetching && 'animate-spin')} />
+            </button>
+            <Button icon={UploadCloud} loading={uploading} onClick={() => dropzoneInputRef.current?.click()}>
+              Upload
             </Button>
           </div>
         }
       />
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Card className="p-4 sm:p-5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Total Resumes</span>
-            <FileText className="size-4 text-signal" />
-          </div>
-          <p className="mt-2 text-2xl font-bold font-serif text-ink tabular-nums">{resumeList.length}</p>
-          <p className="mt-0.5 text-xs text-ink-soft">Stored documents for matching</p>
-        </Card>
-
-        <Card className="p-4 sm:p-5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Target Roles</span>
-            <Briefcase className="size-4 text-signal" />
-          </div>
-          <p className="mt-2 text-2xl font-bold font-serif text-ink tabular-nums">{uniqueRoles.length}</p>
-          <p className="mt-0.5 text-xs text-ink-soft">Unique candidate specializations</p>
-        </Card>
-
-        <Card className="p-4 sm:p-5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Extracted Skills</span>
-            <Sparkles className="size-4 text-amber" />
-          </div>
-          <p className="mt-2 text-2xl font-bold font-serif text-ink tabular-nums">{totalSkillsCount}</p>
-          <p className="mt-0.5 text-xs text-ink-soft">ATS keywords classified</p>
-        </Card>
-      </div>
-
-      <Dropzone onFiles={onFiles} uploading={uploading} inputRef={dropzoneInputRef} />
-
-      <input
-        ref={replaceFileRef}
-        type="file"
-        hidden
-        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        onChange={onReplaceFileSelected}
-      />
-
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by candidate name, target role, or skills…"
-            className="h-10 w-full rounded-control border border-line-strong bg-paper-raised pl-9 pr-3 text-sm focus:border-signal focus:outline-none focus:ring-2 focus:ring-signal/20"
-          />
+      {hasResumes && (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <Card className="p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+              Total Resumes
+            </p>
+            <p className="mt-2 font-serif text-3xl font-medium tabular-nums">{resumeList.length}</p>
+          </Card>
+          <Card className="p-5 border-emerald-500/20 bg-emerald-500/10">
+            <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+              ATS Parsed
+            </p>
+            <p className="mt-2 font-serif text-3xl font-medium tabular-nums text-emerald-800 dark:text-emerald-300">
+              {parsedResumesCount}
+            </p>
+          </Card>
+          <Card className="p-5 border-blue-500/20 bg-blue-500/10">
+            <p className="text-xs font-semibold uppercase tracking-wider text-blue-800 dark:text-blue-300">
+              Target Roles
+            </p>
+            <p className="mt-2 font-serif text-3xl font-medium tabular-nums text-blue-800 dark:text-blue-300">
+              {uniqueRoles.length}
+            </p>
+          </Card>
+          <Card className="p-5 border-amber/20 bg-amber-soft/40">
+            <p className="text-xs font-semibold uppercase tracking-wider text-amber">
+              Extracted Skills
+            </p>
+            <p className="mt-2 font-serif text-3xl font-medium tabular-nums text-amber">
+              {totalSkillsCount}
+            </p>
+          </Card>
         </div>
-        {uniqueRoles.length > 0 && (
-          <div className="w-full sm:w-56">
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="h-10 w-full rounded-control border border-line-strong bg-paper-raised px-3 text-sm focus:border-signal focus:outline-none"
-            >
-              <option value="">All Target Roles ({uniqueRoles.length})</option>
-              {uniqueRoles.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
+      )}
 
-      <div className="space-y-4">
+      <Dropzone onFiles={onFiles} uploading={uploading} inputRef={dropzoneInputRef} compact={hasResumes} />
+
+      <input ref={replaceFileRef} type="file" hidden accept={ACCEPT} onChange={onReplaceFileSelected} />
+
+      {hasResumes && (
+        <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft/70" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, role or skill"
+              className="h-10 w-full rounded-control border border-line-strong bg-paper-raised pl-9 pr-9 text-sm text-ink shadow-[0_1px_2px_rgb(0_0_0/0.03)] placeholder:text-ink-soft/50 transition hover:border-ink-soft/40 focus:border-signal focus:outline-none focus:ring-[3px] focus:ring-signal/15"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-ink-soft hover:bg-paper-sunken hover:text-ink"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
+          {uniqueRoles.length > 0 && (
+            <div className="relative w-full sm:w-56">
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                aria-label="Filter by target role"
+                className="h-10 w-full appearance-none rounded-control border border-line-strong bg-paper-raised pl-3 pr-9 text-sm text-ink shadow-[0_1px_2px_rgb(0_0_0/0.03)] transition hover:border-ink-soft/40 focus:border-signal focus:outline-none focus:ring-[3px] focus:ring-signal/15"
+              >
+                <option value="">All roles</option>
+                {uniqueRoles.map((role) => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft" />
+            </div>
+          )}
+          {filtering && (
+            <p className="shrink-0 text-[13px] text-ink-soft tabular-nums">
+              {filteredResumes.length} of {resumeList.length}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-3">
         {isLoading ? (
-          [0, 1].map((i) => <Skeleton key={i} className="h-40" />)
+          [0, 1, 2].map((i) => <Skeleton key={i} className="h-36 rounded-card" />)
         ) : !filteredResumes.length ? (
-          <EmptyState
-            icon={FileText}
-            title={search || roleFilter ? 'No matching resumes' : 'No resumes yet'}
-            description={
-              search || roleFilter
-                ? 'Try adjusting your search query or role filter.'
-                : 'Upload candidate resumes to start matching and applying automatically.'
-            }
-          />
+          hasResumes ? (
+            <EmptyState
+              icon={Search}
+              title="No matching resumes"
+              description="Try a different search or clear the role filter."
+              action={<Button variant="secondary" onClick={() => { setSearch(''); setRoleFilter(''); }}>Clear filters</Button>}
+            />
+          ) : (
+            <p className="text-center text-sm text-ink-soft">Upload your first resume to start matching and applying automatically.</p>
+          )
         ) : (
           <AnimatePresence initial={false}>
             {filteredResumes.map((r) => (
-              <motion.div
+              <ResumeCard
                 key={r.id}
-                layout
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-              >
-                <Card className="p-5">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:justify-between">
-                    <div className="min-w-0 space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="break-all font-serif text-lg font-medium">
-                          {r.display_name || r.file_name}
-                        </h3>
-                        {r.is_default && <Badge tone="signal" dot>Default</Badge>}
-                        {r.custom_fields && typeof r.custom_fields === 'object' && !Array.isArray(r.custom_fields) && Object.keys(r.custom_fields).length > 0 && (
-                          <Badge tone="neutral">
-                            {Object.entries(r.custom_fields).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' · ')}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-ink-soft">
-                        {[
-                          r.target_role,
-                          r.experience_years,
-                          r.file_name && r.display_name && r.file_name !== r.display_name ? r.file_name : null,
-                          r.created_at ? `added ${timeAgo(r.created_at)}` : null,
-                        ].filter(Boolean).join(' · ')}
-                      </p>
-                      {r.summary && <p className="max-w-2xl text-sm leading-relaxed text-ink-soft">{r.summary}</p>}
-                      <div className="flex flex-wrap gap-1.5">
-                        {r.skills?.slice(0, 14).map((s) => <Badge key={s}>{s}</Badge>)}
-                        {r.skills?.length > 14 && <Badge>+{r.skills.length - 14}</Badge>}
-                        {(!r.skills || !r.skills.length) && (
-                          <span className="text-sm text-amber">No skills detected. Click Edit to add skills.</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap gap-2 sm:flex-col sm:w-36">
-                      <Button size="sm" variant="secondary" icon={Eye} onClick={() => setPreview(r)}>
-                        Preview
-                      </Button>
-                      <Button size="sm" variant="secondary" icon={Pencil} onClick={() => setEditing(r)}>
-                        Edit details
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        icon={RefreshCw}
-                        loading={activeReparseId === r.id}
-                        onClick={() => handleReparse(r.id)}
-                      >
-                        Re-parse
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        icon={Replace}
-                        loading={replacing && targetReplaceResumeRef.current?.id === r.id}
-                        onClick={() => handleTriggerReplace(r)}
-                      >
-                        Replace file
-                      </Button>
-                      {!r.is_default && (
-                        <Button size="sm" variant="ghost" icon={Star} onClick={() => setDefault(r.id)}>
-                          Make default
-                        </Button>
-                      )}
-                      <Button size="sm" variant="ghost" icon={Trash2} onClick={() => setConfirmDelete(r)}>
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              </motion.div>
+                r={r}
+                busy={
+                  activeReparseId === r.id ? 'Re-parsing…'
+                    : replacing && targetReplaceResumeRef.current?.id === r.id ? 'Replacing…'
+                    : null
+                }
+                onPreview={() => setPreview(r)}
+                onEdit={() => setEditing(r)}
+                onReparse={() => handleReparse(r.id)}
+                onReplace={() => handleTriggerReplace(r)}
+                onDefault={() => handleSetDefault(r.id)}
+                onDelete={() => setConfirmDelete(r)}
+              />
             ))}
           </AnimatePresence>
         )}
@@ -590,12 +717,13 @@ export default function ResumesPage() {
         open={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}
         title="Delete this resume?"
-        description={confirmDelete?.file_name}
+        description={confirmDelete?.display_name || confirmDelete?.file_name}
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirmDelete(null)}>Keep it</Button>
             <Button
               variant="danger"
+              loading={deleting}
               onClick={async () => {
                 try {
                   await remove(confirmDelete.id).unwrap();

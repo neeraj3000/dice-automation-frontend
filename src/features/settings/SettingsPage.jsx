@@ -61,7 +61,7 @@ function StepList({ steps }) {
     <ol className="space-y-3">
       {steps.map((step, i) => (
         <li key={step.title} className="flex items-start gap-3">
-          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-signal text-xs font-bold text-white">
+          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-signal text-xs font-bold text-on-signal">
             {i + 1}
           </span>
           <div>
@@ -621,7 +621,7 @@ export default function SettingsPage() {
 
           <div className="space-y-3">
             <div className="flex items-start gap-3 rounded-control border border-line bg-paper-sunken p-3">
-              <div className="grid size-6 shrink-0 place-items-center rounded-full bg-signal text-xs font-bold text-white">
+              <div className="grid size-6 shrink-0 place-items-center rounded-full bg-signal text-xs font-bold text-on-signal">
                 1
               </div>
               <div className="flex-1">
@@ -643,7 +643,7 @@ export default function SettingsPage() {
             </div>
 
             <div className="flex items-start gap-3 rounded-control border border-line bg-paper-sunken p-3">
-              <div className="grid size-6 shrink-0 place-items-center rounded-full bg-signal text-xs font-bold text-white">
+              <div className="grid size-6 shrink-0 place-items-center rounded-full bg-signal text-xs font-bold text-on-signal">
                 2
               </div>
               <div className="flex-1">

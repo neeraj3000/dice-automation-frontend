@@ -1,11 +1,16 @@
+import { useSelector, useDispatch } from 'react-redux';
 import { motion } from 'framer-motion';
 import { Briefcase, Globe, Hash, Mail, MapPin, PencilLine, Phone, Plane } from 'lucide-react';
 import { FlagImage, guessCountryByPartialPhoneNumber } from 'react-international-phone';
+import toast from 'react-hot-toast';
 
 import Button from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { cn } from '../../lib/cn';
 import { GithubIcon, LinkedinIcon } from './ProfileEditModal';
+import ProfileAvatarPicker from './ProfileAvatarPicker';
+import { useUploadAvatarMutation, useDeleteAvatarMutation } from './settingsApi';
+import { setCredentials } from '../auth/authSlice';
 
 const COMPLETENESS_FIELDS = [
   'first_name', 'last_name', 'email', 'phone', 'city', 'state', 'zip_code',
@@ -60,24 +65,78 @@ function LinkValue({ url }) {
 }
 
 export default function ProfileSummary({ profile, onEdit }) {
-  const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ');
-  const initials = `${profile.first_name?.[0] || ''}${profile.last_name?.[0] || ''}`.toUpperCase() || '?';
-  const location = [profile.city, profile.state, profile.zip_code].filter(Boolean).join(', ');
-  const filled = COMPLETENESS_FIELDS.filter((k) => String(profile[k] ?? '').trim()).length;
+  const dispatch = useDispatch();
+  const user = useSelector((s) => s.auth.user);
+  const token = useSelector((s) => s.auth.token);
+
+  // Prefer custom-uploaded avatar, then Google avatar
+  const customAvatar = profile?.avatar || profile?.avatar_url;
+  const googleAvatar = user?.avatar;
+  const avatarUrl = customAvatar || googleAvatar || null;
+  const avatarPublicId = profile?.avatar_public_id || null;
+
+  const [uploadAvatar, { isLoading: uploading }] = useUploadAvatarMutation();
+  const [deleteAvatar, { isLoading: deleting }] = useDeleteAvatarMutation();
+
+  const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ');
+  const initials =
+    `${profile?.first_name?.[0] || user?.name?.[0] || ''}${profile?.last_name?.[0] || ''}`.toUpperCase() ||
+    user?.name?.[0]?.toUpperCase() ||
+    '?';
+  const location = [profile?.city, profile?.state, profile?.zip_code].filter(Boolean).join(', ');
+  const filled = COMPLETENESS_FIELDS.filter((k) => String(profile?.[k] ?? '').trim()).length;
   const completeness = Math.round((filled / COMPLETENESS_FIELDS.length) * 100);
+
+  const handleUpload = async (dataUrl) => {
+    try {
+      const result = await uploadAvatar({
+        image_data: dataUrl,
+        old_public_id: avatarPublicId || undefined,
+      }).unwrap();
+      // Reflect new avatar in the header immediately
+      if (user) {
+        dispatch(setCredentials({
+          access_token: token,
+          user: { ...user, avatar: result.avatar_url },
+        }));
+      }
+      toast.success('Profile photo updated!');
+    } catch (err) {
+      toast.error(err?.data?.detail || 'Upload failed. Please try again.');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!avatarPublicId) {
+      toast.error('No custom photo to delete.');
+      return;
+    }
+    try {
+      await deleteAvatar({ public_id: avatarPublicId }).unwrap();
+      if (user) {
+        dispatch(setCredentials({
+          access_token: token,
+          user: { ...user, avatar: googleAvatar || null },
+        }));
+      }
+      toast.success('Profile photo removed.');
+    } catch (err) {
+      toast.error(err?.data?.detail || 'Delete failed. Please try again.');
+    }
+  };
 
   return (
     <Card className="overflow-hidden">
       {/* Identity header */}
       <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:p-6">
-        <motion.div
-          initial={{ scale: 0.7, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 360, damping: 22 }}
-          className="grid size-16 shrink-0 place-items-center rounded-full bg-signal text-xl font-semibold text-white shadow-card"
-        >
-          {initials}
-        </motion.div>
+        <ProfileAvatarPicker
+          avatarUrl={avatarUrl}
+          initials={initials}
+          size="lg"
+          loading={uploading || deleting}
+          onUpload={handleUpload}
+          onDelete={handleDelete}
+        />
 
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-serif text-xl font-medium tracking-tight">
@@ -104,35 +163,35 @@ export default function ProfileSummary({ profile, onEdit }) {
         </Button>
       </div>
 
-      {/* Details */}
+      {/* Details grid */}
       <motion.div
         variants={container}
         initial="hidden"
         animate="show"
         className="grid gap-3 border-t border-line p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-3"
       >
-        <InfoTile icon={Mail} label="Email" empty={!profile.email}>{profile.email}</InfoTile>
-        <InfoTile icon={Phone} label="Phone" empty={!profile.phone}>
-          <PhoneValue phone={profile.phone} />
+        <InfoTile icon={Mail} label="Email" empty={!profile?.email}>{profile?.email}</InfoTile>
+        <InfoTile icon={Phone} label="Phone" empty={!profile?.phone}>
+          <PhoneValue phone={profile?.phone} />
         </InfoTile>
         <InfoTile icon={MapPin} label="Location" empty={!location}>{location}</InfoTile>
-        <InfoTile icon={LinkedinIcon} label="LinkedIn" empty={!profile.linkedin_url}>
-          <LinkValue url={profile.linkedin_url} />
+        <InfoTile icon={LinkedinIcon} label="LinkedIn" empty={!profile?.linkedin_url}>
+          <LinkValue url={profile?.linkedin_url} />
         </InfoTile>
-        <InfoTile icon={GithubIcon} label="GitHub" empty={!profile.github_url}>
-          <LinkValue url={profile.github_url} />
+        <InfoTile icon={GithubIcon} label="GitHub" empty={!profile?.github_url}>
+          <LinkValue url={profile?.github_url} />
         </InfoTile>
-        <InfoTile icon={Globe} label="Portfolio" empty={!profile.portfolio_url}>
-          <LinkValue url={profile.portfolio_url} />
+        <InfoTile icon={Globe} label="Portfolio" empty={!profile?.portfolio_url}>
+          <LinkValue url={profile?.portfolio_url} />
         </InfoTile>
-        <InfoTile icon={Hash} label="Experience" empty={!profile.years_of_experience}>
-          {profile.years_of_experience} {Number(profile.years_of_experience) === 1 ? 'year' : 'years'}
+        <InfoTile icon={Hash} label="Experience" empty={!profile?.years_of_experience}>
+          {profile?.years_of_experience} {Number(profile?.years_of_experience) === 1 ? 'year' : 'years'}
         </InfoTile>
-        <InfoTile icon={Briefcase} label="Work Authorization" empty={!profile.work_authorization}>
-          {profile.work_authorization}
+        <InfoTile icon={Briefcase} label="Work Authorization" empty={!profile?.work_authorization}>
+          {profile?.work_authorization}
         </InfoTile>
         <InfoTile icon={Plane} label="Relocation">
-          {profile.willing_to_relocate ? 'Open to relocate' : 'Not relocating'}
+          {profile?.willing_to_relocate ? 'Open to relocate' : 'Not relocating'}
         </InfoTile>
       </motion.div>
     </Card>

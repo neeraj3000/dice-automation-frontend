@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -28,6 +28,7 @@ import { useApplicationWatcher } from '../../features/applications/useApplicatio
 import { useGetApplicationsQuery } from '../../features/applications/applicationsApi';
 import { useGetReviewQueueQuery } from '../../features/review/reviewQueueApi';
 import { useGetResumesQuery } from '../../features/resumes/resumesApi';
+import { useGetProfileQuery } from '../../features/settings/settingsApi';
 import { useDice } from '../../context/DiceContext';
 import { Logo, Spinner } from '../ui/Misc';
 import { cn } from '../../lib/cn';
@@ -48,52 +49,107 @@ const linkCls = ({ isActive }) =>
     isActive ? 'bg-signal-soft text-signal-deep font-semibold' : 'text-ink-soft hover:bg-paper-sunken hover:text-ink'
   );
 
-function SidebarContent({ active, reviewCount, resumeCount }) {
+const collapsedLinkCls = ({ isActive }) =>
+  cn(
+    'relative flex size-10 mx-auto items-center justify-center rounded-control transition-colors',
+    isActive ? 'bg-signal-soft text-signal-deep font-semibold shadow-xs' : 'text-ink-soft hover:bg-paper-sunken hover:text-ink'
+  );
+
+function SidebarContent({ active, reviewCount, resumeCount, isMobile = false, collapsed = false }) {
   const dispatch = useDispatch();
-  const navigate = useNavigate();
   const close = () => dispatch(closeSidebar());
   const { diceStatus } = useDice();
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-line">
-        <div className="flex items-center gap-2">
-          <Logo />
-          <span className="rounded-md bg-signal-soft px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-signal-deep">
-            PRO
-          </span>
+      {/* Top Header: Full Brand or Icon Logo */}
+      {collapsed ? (
+        <div className="flex h-16 items-center justify-center border-b border-line px-2">
+          <NavLink to="/" title="Apply2Hire Dashboard" className="flex items-center justify-center">
+            <Logo variant="icon" className="h-7" />
+          </NavLink>
         </div>
-        <button
-          type="button"
-          onClick={() => dispatch(toggleDesktopSidebar())}
-          title="Collapse sidebar"
-          className="hidden lg:grid size-8 place-items-center rounded-lg text-ink-soft hover:bg-paper-sunken hover:text-ink transition-colors"
-        >
-          <PanelLeftClose className="size-4" />
-        </button>
-      </div>
+      ) : (
+        <div className="flex h-16 items-center justify-between px-4 border-b border-line">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Logo className="h-6" />
+            <span className="rounded-md bg-signal-soft px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-signal-deep shrink-0">
+              PRO
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => dispatch(isMobile ? closeSidebar() : toggleDesktopSidebar())}
+            title={isMobile ? 'Close menu' : 'Collapse sidebar'}
+            aria-label={isMobile ? 'Close menu' : 'Collapse sidebar'}
+            className="size-8 flex items-center justify-center rounded-lg text-ink-soft hover:bg-paper-sunken hover:text-ink transition-colors"
+          >
+            <PanelLeftClose className="size-4" />
+          </button>
+        </div>
+      )}
 
-      <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4" aria-label="Main">
+      {/* When collapsed on desktop, a neat expand button right at the top of the rail */}
+      {collapsed && (
+        <div className="px-2 pt-2.5 pb-1">
+          <button
+            type="button"
+            onClick={() => dispatch(toggleDesktopSidebar())}
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
+            className="flex size-10 mx-auto items-center justify-center rounded-control text-ink-soft hover:bg-paper-sunken hover:text-ink transition-colors border border-transparent hover:border-line"
+          >
+            <PanelLeftOpen className="size-[18px]" />
+          </button>
+          <div className="my-2 mx-auto w-8 h-px bg-line" />
+        </div>
+      )}
+
+      <nav className={cn('flex-1 space-y-6 overflow-y-auto', collapsed ? 'px-1.5 py-2' : 'px-3 py-4')} aria-label="Main">
         <div className="space-y-1">
           {NAV.map(({ to, label, icon: Icon, end, badgeKey }) => (
-            <NavLink key={to} to={to} end={end} onClick={close} className={linkCls}>
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              onClick={close}
+              title={label}
+              className={collapsed ? collapsedLinkCls : linkCls}
+            >
               <Icon className="size-[18px] shrink-0" />
-              <span className="truncate">{label}</span>
+              {!collapsed && <span className="truncate">{label}</span>}
 
-              {badgeKey === 'resumes' && resumeCount > 0 && (
+              {/* Badges - expanded mode */}
+              {!collapsed && badgeKey === 'resumes' && resumeCount > 0 && (
                 <span className="ml-auto inline-flex items-center justify-center rounded-full bg-paper-sunken px-2 py-0.5 text-[11px] font-medium text-ink-soft tabular-nums border border-line">
-                  ~{resumeCount} Files
+                  {resumeCount} {resumeCount === 1 ? 'file' : 'files'}
                 </span>
               )}
 
-              {badgeKey === 'apps' && active && (
-                <span className="ml-auto size-2 animate-pulse rounded-full bg-amber" aria-label="Application running" />
+              {!collapsed && badgeKey === 'apps' && active && (
+                <span className="ml-auto size-2 animate-pulse rounded-full bg-signal" aria-label="Application running" />
               )}
 
-              {badgeKey === 'review' && reviewCount > 0 && (
+              {!collapsed && badgeKey === 'review' && reviewCount > 0 && (
                 <span
                   className="ml-auto inline-flex items-center justify-center rounded-full bg-amber-soft px-2 py-0.5 text-[11px] font-semibold text-amber tabular-nums border border-amber/30 animate-pulse"
                   title={`${reviewCount} screener questions waiting for review`}
+                >
+                  {reviewCount}
+                </span>
+              )}
+
+              {/* Badges - collapsed mode */}
+              {collapsed && badgeKey === 'resumes' && resumeCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-signal" title={`${resumeCount} files`} />
+              )}
+              {collapsed && badgeKey === 'apps' && active && (
+                <span className="absolute top-1.5 right-1.5 size-2 animate-pulse rounded-full bg-signal" />
+              )}
+              {collapsed && badgeKey === 'review' && reviewCount > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber px-1 text-[9px] font-bold text-white shadow-xs"
+                  title={`${reviewCount} screener questions`}
                 >
                   {reviewCount}
                 </span>
@@ -103,22 +159,52 @@ function SidebarContent({ active, reviewCount, resumeCount }) {
         </div>
 
         <div>
-          <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-ink-soft/70">Automation Boards</p>
+          {collapsed ? (
+            <div className="my-2 mx-auto w-8 h-px bg-line" />
+          ) : (
+            <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-soft/70">Automation Boards</p>
+          )}
+
           <div className="space-y-1">
             {BOARD_REGISTRY.map((b) =>
               b.enabled ? (
-                <NavLink key={b.key} to={`/boards/${b.key}`} onClick={close} className={linkCls}>
+                <NavLink
+                  key={b.key}
+                  to={`/boards/${b.key}`}
+                  onClick={close}
+                  title={b.name}
+                  className={collapsed ? collapsedLinkCls : linkCls}
+                >
                   <Briefcase className="size-[18px] shrink-0" />
-                  <span className="truncate">{b.name}</span>
+                  {!collapsed && <span className="truncate">{b.name}</span>}
                   {b.key === 'dice' && diceStatus?.is_connected && (
-                    <span className="ml-auto size-2 rounded-full bg-signal" title="Dice connected" />
+                    <span
+                      className={cn(
+                        'rounded-full bg-signal',
+                        collapsed ? 'absolute top-1.5 right-1.5 size-2 ring-2 ring-paper' : 'ml-auto size-2'
+                      )}
+                      title="Dice connected"
+                    />
                   )}
                 </NavLink>
               ) : (
-                <div key={b.key} className="flex items-center gap-3 rounded-control px-3 py-2 text-sm text-ink-soft/50" aria-disabled>
+                <div
+                  key={b.key}
+                  title={`${b.name} (Coming Soon)`}
+                  className={cn(
+                    collapsed
+                      ? 'flex size-10 mx-auto items-center justify-center rounded-control text-ink-soft/40 cursor-not-allowed'
+                      : 'flex items-center gap-3 rounded-control px-3 py-2 text-sm text-ink-soft/50'
+                  )}
+                  aria-disabled
+                >
                   <Briefcase className="size-[18px] shrink-0" />
-                  <span className="truncate">{b.name}</span>
-                  <span className="ml-auto text-[10px] font-medium uppercase tracking-wider">Soon</span>
+                  {!collapsed && <span className="truncate">{b.name}</span>}
+                  {!collapsed && (
+                    <span className="ml-auto text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-paper-sunken border border-line/60">
+                      Soon
+                    </span>
+                  )}
                 </div>
               )
             )}
@@ -132,7 +218,7 @@ function SidebarContent({ active, reviewCount, resumeCount }) {
 const PAGE_TITLES = {
   '/': { title: 'Dashboard', desc: 'Job search, automation metrics, and application activity.' },
   '/resumes': { title: 'Resume Library', desc: 'Manage candidate resumes and ATS skill extractions.' },
-  '/search-profiles': { title: 'Search Profiles', desc: 'Automated matching & protected Playwright submission.' },
+  '/search-profiles': { title: 'Search Profiles', desc: 'Saved searches you can run any time.' },
   '/jobs': { title: 'Jobs Explorer', desc: 'Scrape Dice jobs, analyze requirements, and evaluate resumes.' },
   '/applications': { title: 'Applications', desc: 'Track automated submissions and execution logs.' },
   '/review': { title: 'Review Queue', desc: 'Resolve unmapped screener questions to resume submissions.' },
@@ -154,6 +240,20 @@ export default function AppShell() {
   const { data: apps = [] } = useGetApplicationsQuery();
   const { data: reviewItems = [] } = useGetReviewQueueQuery();
   const { data: resumes = [] } = useGetResumesQuery();
+  const { data: profile } = useGetProfileQuery();
+
+  // Prefer profile first_name + last_name; fall back to auth user name
+  const displayName = [
+    profile?.first_name,
+    profile?.last_name,
+  ].filter(Boolean).join(' ') || user?.name || 'User';
+
+  // Use custom uploaded avatar first, then Google avatar from auth
+  const navAvatarUrl = profile?.avatar || profile?.avatar_url || user?.avatar || null;
+  const [navImgError, setNavImgError] = useState(false);
+  useEffect(() => {
+    setNavImgError(false);
+  }, [navAvatarUrl]);
 
   const reviewCount = reviewItems.length || apps.filter((a) => a.status === 'REVIEW').length;
   const resumeCount = Array.isArray(resumes) ? resumes.length : 0;
@@ -164,15 +264,21 @@ export default function AppShell() {
   };
 
   return (
-    <div className={cn('min-h-dvh transition-[padding] duration-200 ease-in-out', desktopOpen ? 'lg:pl-64' : 'lg:pl-0')}>
-      {/* Desktop Persistent / Collapsible Sidebar */}
+    <div className={cn('min-h-dvh transition-[padding] duration-200 ease-in-out', desktopOpen ? 'lg:pl-64' : 'lg:pl-16')}>
+      {/* Desktop Persistent / Collapsible Sidebar (rail when collapsed) */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-30 hidden border-r border-line bg-paper lg:block transition-transform duration-200 ease-in-out w-64',
-          desktopOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
+          'fixed inset-y-0 left-0 z-30 hidden border-r border-line bg-paper lg:block transition-[width] duration-200 ease-in-out overflow-hidden',
+          desktopOpen ? 'w-64' : 'w-16'
         )}
       >
-        <SidebarContent active={active} reviewCount={reviewCount} resumeCount={resumeCount} />
+        <SidebarContent
+          active={active}
+          reviewCount={reviewCount}
+          resumeCount={resumeCount}
+          collapsed={!desktopOpen}
+          isMobile={false}
+        />
       </aside>
 
       {/* Mobile Drawer Sidebar */}
@@ -193,7 +299,13 @@ export default function AppShell() {
               exit={{ x: -288 }}
               transition={{ type: 'spring', damping: 32, stiffness: 340 }}
             >
-              <SidebarContent active={active} reviewCount={reviewCount} resumeCount={resumeCount} />
+              <SidebarContent
+                active={active}
+                reviewCount={reviewCount}
+                resumeCount={resumeCount}
+                collapsed={false}
+                isMobile={true}
+              />
             </motion.aside>
           </>
         )}
@@ -203,22 +315,11 @@ export default function AppShell() {
         <div className="flex items-center gap-3">
           {/* Mobile hamburger toggle */}
           <button
-            className="rounded-lg p-2 text-ink-soft hover:bg-paper-sunken lg:hidden"
+            className="flex size-8 items-center justify-center rounded-lg text-ink-soft hover:bg-paper-sunken hover:text-ink lg:hidden transition-colors"
             aria-label="Open menu"
             onClick={() => dispatch(toggleSidebar())}
           >
             <Menu className="size-5" />
-          </button>
-
-          {/* Desktop sidebar toggle button */}
-          <button
-            type="button"
-            className="hidden rounded-lg p-2 text-ink-soft hover:bg-paper-sunken hover:text-ink lg:flex transition-colors"
-            aria-label={desktopOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            title={desktopOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            onClick={() => dispatch(toggleDesktopSidebar())}
-          >
-            {desktopOpen ? <PanelLeftClose className="size-5" /> : <PanelLeftOpen className="size-5" />}
           </button>
 
           <div>
@@ -251,21 +352,27 @@ export default function AppShell() {
           <button
             onClick={toggle}
             aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-            className="rounded-lg p-2 text-ink-soft hover:bg-paper-sunken"
+            className="size-8 flex items-center justify-center rounded-lg text-ink-soft hover:bg-paper-sunken hover:text-ink transition-colors"
           >
-            {dark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
+            {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </button>
 
           <div className="mx-1 hidden text-right sm:block">
-            <p className="text-[13px] font-medium leading-tight">{user?.name || 'User'}</p>
+            <p className="text-[13px] font-medium leading-tight text-ink">{displayName}</p>
             <p className="text-xs leading-tight text-ink-soft">{user?.email}</p>
           </div>
 
-          {user?.avatar ? (
-            <img src={user.avatar} alt="" referrerPolicy="no-referrer" className="size-8 rounded-full border border-line" />
+          {navAvatarUrl && !navImgError ? (
+            <img
+              src={navAvatarUrl}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="size-8 rounded-full border border-line object-cover shadow-xs"
+              onError={() => setNavImgError(true)}
+            />
           ) : (
-            <span className="grid size-8 place-items-center rounded-full bg-signal-soft text-sm font-semibold text-signal-deep">
-              {user?.name?.[0]?.toUpperCase() || 'U'}
+            <span className="grid size-8 place-items-center rounded-full bg-signal-soft text-xs font-bold text-signal-deep border border-signal/20 shadow-xs">
+              {displayName?.[0]?.toUpperCase() || 'U'}
             </span>
           )}
 
@@ -273,9 +380,10 @@ export default function AppShell() {
             onClick={() => logout()}
             disabled={isLoading}
             aria-label="Sign out"
-            className="rounded-lg p-2 text-ink-soft hover:bg-paper-sunken"
+            title="Sign out"
+            className="size-8 flex items-center justify-center rounded-lg text-ink-soft hover:bg-paper-sunken hover:text-ink transition-colors"
           >
-            <LogOut className="size-[18px]" />
+            <LogOut className="size-4" />
           </button>
         </div>
       </header>

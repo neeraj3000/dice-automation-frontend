@@ -27,7 +27,7 @@ class ErrorBoundary extends Component {
               {this.state.error.stack}
             </pre>
           )}
-          <button onClick={() => window.location.reload()} className="mt-5 rounded-control bg-signal px-4 py-2 text-sm font-medium text-white">Reload</button>
+          <button onClick={() => window.location.reload()} className="mt-5 rounded-control bg-signal px-4 py-2 text-sm font-medium text-on-signal">Reload</button>
         </div>
       </div>
     );

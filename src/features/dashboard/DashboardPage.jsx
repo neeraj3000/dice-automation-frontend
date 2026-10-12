@@ -31,7 +31,7 @@ function StatCard({ icon: Icon, label, value, to, badge, iconColor = 'text-signa
     <Link to={to} className="group">
       <Card className="p-5 transition-all duration-200 group-hover:shadow-raised group-hover:border-signal/40 h-full flex flex-col justify-between">
         <div className="flex items-center justify-between text-ink-soft">
-          <div className="grid size-10 place-items-center rounded-xl bg-signal-soft/80 text-signal transition group-hover:bg-signal group-hover:text-white">
+          <div className="grid size-10 place-items-center rounded-xl bg-signal-soft/80 text-signal transition group-hover:bg-signal group-hover:text-on-signal">
             <Icon className="size-5" />
           </div>
           <div className="flex items-center gap-1.5">

@@ -57,13 +57,28 @@ export function PageHeader({ title, description, action }) {
   );
 }
 
-export function Logo({ className }) {
+const LOGO_SRC = {
+  full: { light: '/images/apply2hire_full-logo.png', dark: '/images/apply2hire_full-logo_for-dark-bg.png' },
+  text: { light: '/images/apply2hire_text.png', dark: '/images/apply2hire_text_for-dark-bg.png' },
+  icon: { light: '/images/apply2hire_icon.png', dark: '/images/apply2hire_icon.png' },
+};
+
+// variant: 'full' (icon + wordmark) | 'icon' | 'text'.
+// onDark forces the dark-background artwork (e.g. on the green login hero);
+// otherwise the artwork follows the app's light/dark theme via CSS.
+export function Logo({ variant = 'full', onDark = false, className }) {
+  const src = LOGO_SRC[variant];
+  const imgCls = cn('h-full w-auto select-none', variant === 'icon' && 'aspect-square');
   return (
-    <div className={cn('flex items-center gap-2.5', className)}>
-      <span className="grid size-8 place-items-center rounded-[9px] bg-signal text-white">
-        <svg viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 19 12 5l7 14M8 15h8" /></svg>
-      </span>
-      <span className="font-serif text-xl font-medium tracking-tight">Apply2Hire</span>
-    </div>
+    <span className={cn('inline-flex shrink-0 items-center', variant === 'icon' ? 'h-8' : 'h-7', className)}>
+      {onDark || src.light === src.dark ? (
+        <img src={onDark ? src.dark : src.light} alt="Apply2Hire" className={imgCls} draggable="false" />
+      ) : (
+        <>
+          <img src={src.light} alt="Apply2Hire" className={cn(imgCls, 'dark:hidden')} draggable="false" />
+          <img src={src.dark} alt="Apply2Hire" className={cn(imgCls, 'hidden dark:block')} draggable="false" />
+        </>
+      )}
+    </span>
   );
 }

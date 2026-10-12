@@ -1,5 +1,7 @@
 import { forwardRef, useEffect, useId, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useDispatch, useSelector } from 'react-redux';
+import toast from 'react-hot-toast';
 import {
   Briefcase,
   Building2,
@@ -20,6 +22,9 @@ import 'react-international-phone/style.css';
 import Button from '../../components/ui/Button';
 import { Toggle } from '../../components/ui/Misc';
 import { cn } from '../../lib/cn';
+import ProfileAvatarPicker from './ProfileAvatarPicker';
+import { useUploadAvatarMutation, useDeleteAvatarMutation } from './settingsApi';
+import { setCredentials } from '../auth/authSlice';
 
 export const DEFAULT_PHONE_COUNTRY = 'us';
 const PREFERRED_COUNTRIES = ['us', 'in', 'ca', 'gb'];
@@ -128,6 +133,12 @@ const item = {
 };
 
 export default function ProfileEditModal({ open, onClose, initialProfile, onSave, saving }) {
+  const dispatch = useDispatch();
+  const user = useSelector((s) => s.auth.user);
+  const token = useSelector((s) => s.auth.token);
+  const [uploadAvatar, { isLoading: uploading }] = useUploadAvatarMutation();
+  const [deleteAvatar, { isLoading: deleting }] = useDeleteAvatarMutation();
+
   const [draft, setDraft] = useState(initialProfile);
   const [section, setSection] = useState('contact');
   const [direction, setDirection] = useState(1);
@@ -167,7 +178,72 @@ export default function ProfileEditModal({ open, onClose, initialProfile, onSave
   };
 
   const initials =
-    `${draft?.first_name?.[0] || ''}${draft?.last_name?.[0] || ''}`.toUpperCase() || '?';
+    `${draft?.first_name?.[0] || ''}${draft?.last_name?.[0] || ''}`.toUpperCase() ||
+    user?.name?.[0]?.toUpperCase() ||
+    '?';
+  const googleAvatar = user?.avatar || null;
+  const avatarUrl =
+    draft?.avatar ||
+    draft?.avatar_url ||
+    initialProfile?.avatar ||
+    initialProfile?.avatar_url ||
+    googleAvatar ||
+    null;
+
+  const handleUploadAvatar = async (dataUrl) => {
+    try {
+      const pubId = draft?.avatar_public_id || initialProfile?.avatar_public_id;
+      const result = await uploadAvatar({
+        image_data: dataUrl,
+        old_public_id: pubId || undefined,
+      }).unwrap();
+      setDraft((d) => ({
+        ...d,
+        avatar: result.avatar_url,
+        avatar_url: result.avatar_url,
+        avatar_public_id: result.public_id,
+      }));
+      if (user) {
+        dispatch(
+          setCredentials({
+            access_token: token,
+            user: { ...user, avatar: result.avatar_url },
+          })
+        );
+      }
+      toast.success('Profile photo updated!');
+    } catch (err) {
+      toast.error(err?.data?.detail || 'Upload failed. Please try again.');
+    }
+  };
+
+  const handleDeleteAvatar = async () => {
+    const pubId = draft?.avatar_public_id || initialProfile?.avatar_public_id;
+    if (!pubId) {
+      toast.error('No custom photo to delete.');
+      return;
+    }
+    try {
+      await deleteAvatar({ public_id: pubId }).unwrap();
+      setDraft((d) => ({
+        ...d,
+        avatar: googleAvatar || null,
+        avatar_url: googleAvatar || null,
+        avatar_public_id: null,
+      }));
+      if (user) {
+        dispatch(
+          setCredentials({
+            access_token: token,
+            user: { ...user, avatar: googleAvatar || null },
+          })
+        );
+      }
+      toast.success('Profile photo removed.');
+    } catch (err) {
+      toast.error(err?.data?.detail || 'Delete failed. Please try again.');
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -196,14 +272,14 @@ export default function ProfileEditModal({ open, onClose, initialProfile, onSave
           >
             {/* Header */}
             <div className="flex items-center gap-3.5 px-6 pt-6">
-              <motion.div
-                initial={{ scale: 0.6, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.08, type: 'spring', stiffness: 400, damping: 22 }}
-                className="grid size-11 shrink-0 place-items-center rounded-full bg-signal-soft font-semibold text-signal-deep"
-              >
-                {initials}
-              </motion.div>
+              <ProfileAvatarPicker
+                avatarUrl={avatarUrl}
+                initials={initials}
+                size="md"
+                loading={uploading || deleting}
+                onUpload={handleUploadAvatar}
+                onDelete={handleDeleteAvatar}
+              />
               <div className="min-w-0 flex-1">
                 <h3 className="font-serif text-lg font-medium leading-tight">Edit Profile</h3>
                 <p className="mt-0.5 text-sm text-ink-soft">Used to pre-fill job applications.</p>

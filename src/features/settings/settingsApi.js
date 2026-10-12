@@ -45,6 +45,14 @@ export const settingsApi = api.injectEndpoints({
       query: (params) => ({ url: '/api/dice/session/disconnect', method: 'POST', params }),
       invalidatesTags: ['DiceSession', 'Board', 'Stats'],
     }),
+    uploadAvatar: b.mutation({
+      query: (body) => ({ url: '/avatar', method: 'POST', body }),
+      invalidatesTags: ['Profile'],
+    }),
+    deleteAvatar: b.mutation({
+      query: (body) => ({ url: '/avatar', method: 'DELETE', body }),
+      invalidatesTags: ['Profile'],
+    }),
   }),
 });
 
@@ -61,4 +69,6 @@ export const {
   useOpenDiceLoginMutation,
   useImportDiceSessionMutation,
   useDisconnectDiceMutation,
+  useUploadAvatarMutation,
+  useDeleteAvatarMutation,
 } = settingsApi;

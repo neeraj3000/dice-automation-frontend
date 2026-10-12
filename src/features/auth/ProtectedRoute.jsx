@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import { Logo, Spinner } from '../../components/ui/Misc';
 
 export const Splash = () => (
-  <div className="grid min-h-dvh place-items-center bg-paper"><div className="flex flex-col items-center gap-4"><Logo /><Spinner /></div></div>
+  <div className="grid min-h-dvh place-items-center bg-paper"><div className="flex flex-col items-center gap-4"><Logo variant="icon" className="h-12" /><Spinner /></div></div>
 );
 
 export default function ProtectedRoute() {

@@ -331,6 +331,7 @@ export default function JobsPage() {
 
   // Batch Apply All (Current Page)
   const unappliedOnPage = jobsList.filter((j) => j.status !== 'APPLIED');
+  const appliedJobsCount = jobsList.filter((j) => j.status === 'APPLIED').length;
 
   const handleApplyAll = async () => {
     if (applyAllState.isActive) return;
@@ -459,19 +460,39 @@ export default function JobsPage() {
         }
       />
 
-      {/* Summary strip */}
-      <Card className="grid grid-cols-3 divide-x divide-line">
-        {[
-          ['Jobs found', totalCount],
-          ['Not applied on this page', unappliedOnPage.length],
-          ['Search profiles', profiles.length],
-        ].map(([label, value]) => (
-          <div key={label} className="px-4 py-3.5 sm:px-6">
-            <p className="font-serif text-2xl font-medium tabular-nums text-ink">{value}</p>
-            <p className="mt-0.5 text-xs text-ink-soft">{label}</p>
-          </div>
-        ))}
-      </Card>
+      {/* Top 4 Stat Cards matching Application Tracker design */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Card className="p-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+            Total Jobs Found
+          </p>
+          <p className="mt-2 font-serif text-3xl font-medium tabular-nums">{totalCount}</p>
+        </Card>
+        <Card className="p-5 border-emerald-500/20 bg-emerald-500/10">
+          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+            Submitted (Applied)
+          </p>
+          <p className="mt-2 font-serif text-3xl font-medium tabular-nums text-emerald-800 dark:text-emerald-300">
+            {appliedJobsCount}
+          </p>
+        </Card>
+        <Card className="p-5 border-blue-500/20 bg-blue-500/10">
+          <p className="text-xs font-semibold uppercase tracking-wider text-blue-800 dark:text-blue-300">
+            Ready to Apply
+          </p>
+          <p className="mt-2 font-serif text-3xl font-medium tabular-nums text-blue-800 dark:text-blue-300">
+            {unappliedOnPage.length}
+          </p>
+        </Card>
+        <Card className="p-5 border-amber/20 bg-amber-soft/40">
+          <p className="text-xs font-semibold uppercase tracking-wider text-amber">
+            Search Profiles
+          </p>
+          <p className="mt-2 font-serif text-3xl font-medium tabular-nums text-amber">
+            {profiles.length}
+          </p>
+        </Card>
+      </div>
 
       {/* Batch application progress */}
       {applyAllState.isActive && (

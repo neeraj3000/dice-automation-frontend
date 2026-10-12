@@ -364,7 +364,7 @@ export default function ConnectionCard({ boardKey, name }) {
             <div className="space-y-3">
               {/* Step 1 */}
               <div className="flex items-start gap-3 rounded-control border border-line bg-paper-sunken p-3">
-                <div className="grid size-6 shrink-0 place-items-center rounded-full bg-signal text-xs font-bold text-white">1</div>
+                <div className="grid size-6 shrink-0 place-items-center rounded-full bg-signal text-xs font-bold text-on-signal">1</div>
                 <div className="flex-1">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-medium text-ink">Open {name} in Chrome</p>
@@ -385,7 +385,7 @@ export default function ConnectionCard({ boardKey, name }) {
 
               {/* Step 2 */}
               <div className="flex items-start gap-3 rounded-control border border-line bg-paper-sunken p-3">
-                <div className="grid size-6 shrink-0 place-items-center rounded-full bg-signal text-xs font-bold text-white">2</div>
+                <div className="grid size-6 shrink-0 place-items-center rounded-full bg-signal text-xs font-bold text-on-signal">2</div>
                 <div>
                   <p className="text-sm font-medium text-ink">Log in normally</p>
                   <p className="mt-1 text-xs text-ink-soft">
@@ -396,7 +396,7 @@ export default function ConnectionCard({ boardKey, name }) {
 
               {/* Step 3 */}
               <div className="flex items-start gap-3 rounded-control border border-line bg-paper-sunken p-3">
-                <div className="grid size-6 shrink-0 place-items-center rounded-full bg-signal text-xs font-bold text-white">3</div>
+                <div className="grid size-6 shrink-0 place-items-center rounded-full bg-signal text-xs font-bold text-on-signal">3</div>
                 <div>
                   <p className="text-sm font-medium text-ink">Click "Sync Dice Account"</p>
                   <p className="mt-1 text-xs text-ink-soft">
