@@ -6,7 +6,7 @@ import { api } from '../app/api';
 const DiceContext = createContext(null);
 
 const RAW_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const API_BASE_URL = RAW_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '');
+export const API_BASE_URL = RAW_API_URL.replace(/\/api\/v1\/?$/, '').replace(/\/api\/?$/, '');
 const SSE_URL = `${API_BASE_URL}/settings/dice-session/stream`;
 
 export function DiceProvider({ children }) {
@@ -75,9 +75,13 @@ export function DiceProvider({ children }) {
         legacyData?.is_connected
       );
 
+      const backendUnreachable = legacyRes.status === 'rejected' && sessionRes.status === 'rejected';
+
       const statusVal = isConn
         ? 'CONNECTED'
-        : (sessionData?.status || (legacyData?.is_connected ? 'CONNECTED' : 'LOGIN_REQUIRED'));
+        : backendUnreachable
+          ? 'BACKEND_UNREACHABLE'
+          : (sessionData?.status || (legacyData?.is_connected ? 'CONNECTED' : 'LOGIN_REQUIRED'));
 
       const verifiedTimestamp = sessionData?.last_verified_at || legacyData?.last_verified || null;
 

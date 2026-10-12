@@ -17,6 +17,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-hot-toast": "^2.6.1",
+    "react-international-phone": "^4.8.0",
     "react-redux": "^9.3.0",
     "react-router-dom": "^7.18.4"
   },

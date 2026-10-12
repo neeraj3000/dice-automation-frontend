@@ -1,14 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   Blocks,
   CheckCircle2,
+  Copy,
+  Download,
   ExternalLink,
   Eye,
   EyeOff,
   FileJson,
   Globe,
   PlugZap,
+  Puzzle,
   RefreshCw,
   Save,
   ShieldCheck,
@@ -22,7 +25,7 @@ import { Card, CardBody, CardHeader } from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
-import { Input, Select } from '../../components/ui/Field';
+import { Input } from '../../components/ui/Field';
 import { Chip, PageHeader, Skeleton, Toggle } from '../../components/ui/Misc';
 import { errorMessage, timeAgo } from '../../lib/format';
 import {
@@ -33,17 +36,57 @@ import {
   useUpdateProfileMutation,
   useUpdateSettingsMutation,
 } from './settingsApi';
-import { useDice } from '../../context/DiceContext';
+import { API_BASE_URL, useDice } from '../../context/DiceContext';
+import ProfileEditModal from './ProfileEditModal';
+import ProfileSummary from './ProfileSummary';
 
-const WORK_AUTH_OPTIONS = [
-  'US Citizen',
-  'Green Card',
-  'H1B',
-  'EAD',
-  'OPT/CPT',
-  'TN Visa',
-  'Other / Sponsorship Needed',
+const EXTENSION_DOWNLOAD_URL = `${API_BASE_URL}/api/dice/extension/download`;
+const CHROME_EXTENSIONS_URL = 'chrome://extensions';
+
+const INSTALL_STEPS = [
+  { title: 'Download the extension', body: 'Click "Download Extension" to get dice-chrome-extension.zip, then unzip it to a folder you will keep (e.g. Documents).' },
+  { title: 'Open Chrome extensions', body: 'Paste chrome://extensions into the Chrome address bar (use the copy button — Chrome blocks opening it from a web page).' },
+  { title: 'Turn on Developer mode', body: 'Toggle "Developer mode" ON in the top-right corner of the extensions page.' },
+  { title: 'Load unpacked', body: 'Click "Load unpacked" and select the unzipped dice-chrome-extension folder. Pin it from the puzzle-piece menu so it stays visible.' },
 ];
+
+const SYNC_STEPS = [
+  { title: 'Log in to Dice', body: 'Open dice.com in the same Chrome browser and sign in to your candidate account (email, Google, 2FA — whatever you normally use).' },
+  { title: 'Sync from the extension', body: 'Keep the Dice tab open, click the "Apply2Hire – Dice Session Sync" icon in the toolbar, then click "Sync Dice Account".' },
+  { title: 'Confirm here', body: 'This page detects the sync automatically. Click "Check Status" anytime to confirm your session is still valid.' },
+];
+
+function StepList({ steps }) {
+  return (
+    <ol className="space-y-3">
+      {steps.map((step, i) => (
+        <li key={step.title} className="flex items-start gap-3">
+          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-signal text-xs font-bold text-white">
+            {i + 1}
+          </span>
+          <div>
+            <p className="text-sm font-medium text-ink">{step.title}</p>
+            <p className="mt-0.5 text-xs text-ink-soft leading-relaxed">{step.body}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function downloadExtension() {
+  window.location.href = EXTENSION_DOWNLOAD_URL;
+  toast.success('Downloading extension… unzip it, then load it in chrome://extensions.');
+}
+
+async function copyExtensionsUrl() {
+  try {
+    await navigator.clipboard.writeText(CHROME_EXTENSIONS_URL);
+    toast.success('Copied chrome://extensions — paste it into the address bar.');
+  } catch {
+    toast.error('Could not copy. Type chrome://extensions into the address bar.');
+  }
+}
 
 export default function SettingsPage() {
   const [tab, setTab] = useState('profile');
@@ -92,6 +135,8 @@ export default function SettingsPage() {
   });
 
   const [connectModalOpen, setConnectModalOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const closeProfileModal = useCallback(() => setProfileModalOpen(false), []);
   const cookieFileRef = useRef(null);
 
   useEffect(() => {
@@ -125,10 +170,11 @@ export default function SettingsPage() {
     }
   }, [settingsData]);
 
-  const handleSaveProfile = async (e) => {
-    e.preventDefault();
+  const handleSaveProfile = async (draft) => {
     try {
-      await updateProfile(profile).unwrap();
+      await updateProfile(draft).unwrap();
+      setProfile(draft);
+      setProfileModalOpen(false);
       toast.success('Personal profile saved successfully!');
       refetchProfile();
     } catch (err) {
@@ -187,6 +233,29 @@ export default function SettingsPage() {
     }
   };
 
+  const handleCheckStatus = async () => {
+    const toastId = toast.loading('Checking Dice session…');
+    const status = await refreshDiceStatus(true);
+
+    if (status.is_connected) {
+      const who = status.username ? ` as ${status.username}` : '';
+      const verified = status.last_verified ? ` Last verified ${timeAgo(status.last_verified)}.` : '';
+      toast.success(`Dice session is synced and active${who}.${verified}`, { id: toastId, duration: 5000 });
+      return;
+    }
+
+    const messages = {
+      SESSION_EXPIRED: 'Your Dice session has expired. Log in to dice.com and click "Sync Dice Account" in the extension again.',
+      BACKEND_UNREACHABLE: 'Could not reach the automation server. Make sure the backend is running, then try again.',
+      DISCONNECTED: 'Dice is disconnected. Log in to dice.com and sync with the Chrome extension to reconnect.',
+    };
+    toast.error(
+      messages[status.status] ||
+        'Dice account is not synced yet. Install the Chrome extension, log in to dice.com, then click "Sync Dice Account".',
+      { id: toastId, duration: 6000 }
+    );
+  };
+
   const isLoading = loadingProfile || loadingSettings;
 
   return (
@@ -218,123 +287,7 @@ export default function SettingsPage() {
         <>
           {/* TAB 1: Profile */}
           {tab === 'profile' && (
-            <form onSubmit={handleSaveProfile} className="space-y-6">
-              <Card>
-                <CardHeader
-                  title="Contact Details"
-                  description="Pre-filled into candidate application fields during automated submissions."
-                  action={
-                    <Button type="submit" icon={Save} loading={savingProfile}>
-                      Save Profile
-                    </Button>
-                  }
-                />
-                <CardBody className="grid gap-4 sm:grid-cols-2">
-                  <Input
-                    label="First Name"
-                    value={profile.first_name}
-                    onChange={(e) => setProfile({ ...profile, first_name: e.target.value })}
-                  />
-                  <Input
-                    label="Last Name"
-                    value={profile.last_name}
-                    onChange={(e) => setProfile({ ...profile, last_name: e.target.value })}
-                  />
-                  <Input
-                    label="Email"
-                    type="email"
-                    value={profile.email}
-                    onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                  />
-                  <Input
-                    label="Phone Number"
-                    type="tel"
-                    value={profile.phone}
-                    onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                  />
-                  <Input
-                    label="City"
-                    value={profile.city}
-                    onChange={(e) => setProfile({ ...profile, city: e.target.value })}
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      label="State"
-                      value={profile.state}
-                      onChange={(e) => setProfile({ ...profile, state: e.target.value })}
-                    />
-                    <Input
-                      label="ZIP Code"
-                      value={profile.zip_code}
-                      onChange={(e) => setProfile({ ...profile, zip_code: e.target.value })}
-                    />
-                  </div>
-                </CardBody>
-              </Card>
-
-              <Card>
-                <CardHeader
-                  title="Professional Links & Authorization"
-                  description="Social links and legal eligibility attached to job application wizard forms."
-                />
-                <CardBody className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <Input
-                      label="LinkedIn URL"
-                      type="url"
-                      placeholder="https://linkedin.com/in/…"
-                      value={profile.linkedin_url}
-                      onChange={(e) => setProfile({ ...profile, linkedin_url: e.target.value })}
-                    />
-                    <Input
-                      label="GitHub URL"
-                      type="url"
-                      placeholder="https://github.com/…"
-                      value={profile.github_url}
-                      onChange={(e) => setProfile({ ...profile, github_url: e.target.value })}
-                    />
-                    <Input
-                      label="Portfolio URL"
-                      type="url"
-                      placeholder="https://…"
-                      value={profile.portfolio_url}
-                      onChange={(e) => setProfile({ ...profile, portfolio_url: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-line">
-                    <Input
-                      label="Years of Experience"
-                      type="number"
-                      min="0"
-                      max="50"
-                      value={profile.years_of_experience}
-                      onChange={(e) => setProfile({ ...profile, years_of_experience: e.target.value })}
-                    />
-                    <Select
-                      label="Work Authorization"
-                      value={profile.work_authorization}
-                      onChange={(e) => setProfile({ ...profile, work_authorization: e.target.value })}
-                    >
-                      {WORK_AUTH_OPTIONS.map((opt) => (
-                        <option key={opt} value={opt}>
-                          {opt}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-
-                  <div className="pt-2">
-                    <Toggle
-                      checked={profile.willing_to_relocate}
-                      onChange={(v) => setProfile({ ...profile, willing_to_relocate: v })}
-                      label="Willing to Relocate"
-                      description="Indicates willingness to relocate for hybrid or on-site opportunities."
-                    />
-                  </div>
-                </CardBody>
-              </Card>
-            </form>
+            <ProfileSummary profile={profile} onEdit={() => setProfileModalOpen(true)} />
           )}
 
           {/* TAB 2: Automation */}
@@ -461,7 +414,7 @@ export default function SettingsPage() {
                         size="sm"
                         icon={RefreshCw}
                         loading={isChecking}
-                        onClick={() => refreshDiceStatus(true)}
+                        onClick={handleCheckStatus}
                       >
                         Check Status
                       </Button>
@@ -558,10 +511,76 @@ export default function SettingsPage() {
                   </div>
                 </CardBody>
               </Card>
+
+              {/* Chrome Extension install + sync guide */}
+              <Card>
+                <CardHeader
+                  title="Dice Session Sync Extension"
+                  description="Install our Chrome extension once, then sync your Dice login with a single click — no passwords shared."
+                  action={
+                    <Button size="sm" icon={Download} onClick={downloadExtension}>
+                      Download Extension
+                    </Button>
+                  }
+                />
+                <CardBody className="space-y-5">
+                  <div className="flex items-start gap-3 rounded-control border border-line bg-paper-sunken p-4">
+                    <Puzzle className="size-5 text-signal shrink-0 mt-0.5" />
+                    <div className="text-xs text-ink-soft leading-relaxed">
+                      <p className="font-semibold text-sm text-ink">Why an extension?</p>
+                      <p className="mt-0.5">
+                        Dice sign-in uses CAPTCHA and 2FA, so you log in yourself in Chrome. The extension then securely
+                        copies only your Dice authentication session to the server so the automation bot can search and
+                        apply on your behalf. It never reads your password or browsing history.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-control border border-line p-4">
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+                          Part 1 · Install (one time)
+                        </p>
+                        <Button variant="ghost" size="sm" icon={Copy} onClick={copyExtensionsUrl}>
+                          Copy chrome://extensions
+                        </Button>
+                      </div>
+                      <StepList steps={INSTALL_STEPS} />
+                    </div>
+
+                    <div className="rounded-control border border-line p-4">
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+                          Part 2 · Sync your Dice account
+                        </p>
+                        <Button variant="ghost" size="sm" icon={ExternalLink} onClick={handleTriggerDiceLogin}>
+                          Open Dice
+                        </Button>
+                      </div>
+                      <StepList steps={SYNC_STEPS} />
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-ink-soft">
+                    <strong className="text-ink">Session expired?</strong> Just log in to dice.com again and click
+                    &quot;Sync Dice Account&quot; in the extension — no need to reinstall. Using a hosted backend? Set its URL
+                    under &quot;Backend Connection Settings&quot; in the extension popup.
+                  </p>
+                </CardBody>
+              </Card>
             </div>
           )}
         </>
       )}
+
+      <ProfileEditModal
+        open={profileModalOpen}
+        onClose={closeProfileModal}
+        initialProfile={profile}
+        onSave={handleSaveProfile}
+        saving={savingProfile}
+      />
 
       {/* Connect Dice Guided Modal */}
       <Modal
@@ -576,7 +595,7 @@ export default function SettingsPage() {
               size="sm"
               icon={RefreshCw}
               loading={isChecking}
-              onClick={() => refreshDiceStatus(true)}
+              onClick={handleCheckStatus}
             >
               Check Status
             </Button>
@@ -627,10 +646,17 @@ export default function SettingsPage() {
               <div className="grid size-6 shrink-0 place-items-center rounded-full bg-signal text-xs font-bold text-white">
                 2
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-sm font-medium text-ink">Sync Account via Extension</p>
                 <p className="mt-1 text-xs text-ink-soft">
-                  Click the <strong>Dice Automation Sync</strong> extension icon in your Chrome extensions toolbar and click <strong>&quot;Sync Dice Account&quot;</strong>.
+                  Click the <strong>Apply2Hire – Dice Session Sync</strong> extension icon in your Chrome toolbar and click <strong>&quot;Sync Dice Account&quot;</strong>.
+                </p>
+                <p className="mt-1.5 text-xs text-ink-soft">
+                  Don&apos;t have it yet?{' '}
+                  <button type="button" onClick={downloadExtension} className="font-medium text-signal hover:underline">
+                    Download the extension
+                  </button>{' '}
+                  and follow the install steps on the Dice Session &amp; Board tab.
                 </p>
               </div>
             </div>
