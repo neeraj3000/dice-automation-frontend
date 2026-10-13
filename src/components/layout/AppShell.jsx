@@ -33,32 +33,34 @@ import { useDice } from '../../context/DiceContext';
 import { Logo, Spinner } from '../ui/Misc';
 import { cn } from '../../lib/cn';
 
-const NAV = [
+const PRIMARY_NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/resumes', label: 'Resume Library', icon: FileText, badgeKey: 'resumes' },
   { to: '/search-profiles', label: 'Search Profiles', icon: SlidersHorizontal },
   { to: '/jobs', label: 'Jobs Explorer', icon: Compass },
   { to: '/applications', label: 'Applications', icon: ListChecks, badgeKey: 'apps' },
   { to: '/review', label: 'Review Queue', icon: HelpCircle, badgeKey: 'review' },
-  { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
 const linkCls = ({ isActive }) =>
   cn(
-    'flex items-center gap-3 rounded-control px-3 py-2 text-sm font-medium transition-colors',
-    isActive ? 'bg-signal-soft text-signal-deep font-semibold' : 'text-ink-soft hover:bg-paper-sunken hover:text-ink'
+    'group relative flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-[13.5px] font-medium transition-all duration-150 ease-out select-none',
+    isActive
+      ? 'bg-signal-soft/90 text-signal-deep font-semibold shadow-xs border border-signal/20'
+      : 'text-ink-soft hover:bg-paper-sunken/80 hover:text-ink border border-transparent'
   );
 
 const collapsedLinkCls = ({ isActive }) =>
   cn(
-    'relative flex size-10 mx-auto items-center justify-center rounded-control transition-colors',
-    isActive ? 'bg-signal-soft text-signal-deep font-semibold shadow-xs' : 'text-ink-soft hover:bg-paper-sunken hover:text-ink'
+    'group relative flex size-10 mx-auto items-center justify-center rounded-xl transition-all duration-150 ease-out',
+    isActive
+      ? 'bg-signal-soft/90 text-signal-deep font-semibold shadow-xs border border-signal/20'
+      : 'text-ink-soft hover:bg-paper-sunken/80 hover:text-ink border border-transparent'
   );
 
 function SidebarContent({ active, reviewCount, resumeCount, isMobile = false, collapsed = false }) {
   const dispatch = useDispatch();
   const close = () => dispatch(closeSidebar());
-  const { diceStatus } = useDice();
 
   return (
     <div className="flex h-full flex-col">
@@ -73,7 +75,7 @@ function SidebarContent({ active, reviewCount, resumeCount, isMobile = false, co
         <div className="flex h-16 items-center justify-between px-4 border-b border-line">
           <div className="flex items-center gap-2.5 min-w-0">
             <Logo className="h-6" />
-            <span className="rounded-md bg-signal-soft px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-signal-deep shrink-0">
+            <span className="rounded-md bg-signal-soft px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-signal-deep shrink-0 border border-signal/15">
               PRO
             </span>
           </div>
@@ -89,7 +91,7 @@ function SidebarContent({ active, reviewCount, resumeCount, isMobile = false, co
         </div>
       )}
 
-      {/* When collapsed on desktop, a neat expand button right at the top of the rail */}
+      {/* When collapsed on desktop, expand button right at top of rail */}
       {collapsed && (
         <div className="px-2 pt-2.5 pb-1">
           <button
@@ -97,118 +99,113 @@ function SidebarContent({ active, reviewCount, resumeCount, isMobile = false, co
             onClick={() => dispatch(toggleDesktopSidebar())}
             title="Expand sidebar"
             aria-label="Expand sidebar"
-            className="flex size-10 mx-auto items-center justify-center rounded-control text-ink-soft hover:bg-paper-sunken hover:text-ink transition-colors border border-transparent hover:border-line"
+            className="flex size-10 mx-auto items-center justify-center rounded-xl text-ink-soft hover:bg-paper-sunken hover:text-ink transition-colors border border-transparent hover:border-line"
           >
             <PanelLeftOpen className="size-[18px]" />
           </button>
-          <div className="my-2 mx-auto w-8 h-px bg-line" />
+          <div className="my-2 mx-auto w-8 h-px bg-line/60" />
         </div>
       )}
 
-      <nav className={cn('flex-1 space-y-6 overflow-y-auto', collapsed ? 'px-1.5 py-2' : 'px-3 py-4')} aria-label="Main">
-        <div className="space-y-1">
-          {NAV.map(({ to, label, icon: Icon, end, badgeKey }) => (
+      {/* Navigation Links */}
+      <nav
+        className={cn(
+          'flex-1 flex flex-col justify-between overflow-y-auto',
+          collapsed ? 'px-2 py-3' : 'px-3.5 py-4'
+        )}
+        aria-label="Main"
+      >
+        <div className="space-y-1.5">
+          {PRIMARY_NAV.map(({ to, label, icon: Icon, end, badgeKey }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
               onClick={close}
-              title={label}
+              title={collapsed ? label : undefined}
               className={collapsed ? collapsedLinkCls : linkCls}
             >
-              <Icon className="size-[18px] shrink-0" />
-              {!collapsed && <span className="truncate">{label}</span>}
+              {({ isActive }) => (
+                <>
+                  <Icon
+                    className={cn(
+                      'size-[18px] shrink-0 transition-colors',
+                      isActive ? 'text-signal-deep' : 'text-ink-soft/80 group-hover:text-ink'
+                    )}
+                  />
+                  {!collapsed && <span className="truncate">{label}</span>}
 
-              {/* Badges - expanded mode */}
-              {!collapsed && badgeKey === 'resumes' && resumeCount > 0 && (
-                <span className="ml-auto inline-flex items-center justify-center rounded-full bg-paper-sunken px-2 py-0.5 text-[11px] font-medium text-ink-soft tabular-nums border border-line">
-                  {resumeCount} {resumeCount === 1 ? 'file' : 'files'}
-                </span>
-              )}
+                  {/* Badges - expanded mode */}
+                  {!collapsed && badgeKey === 'resumes' && resumeCount > 0 && (
+                    <span
+                      className={cn(
+                        'ml-auto inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-[11px] font-medium tabular-nums border transition-colors',
+                        isActive
+                          ? 'bg-signal/15 text-signal-deep border-signal/25'
+                          : 'bg-paper-sunken/90 text-ink-soft border-line/70 group-hover:border-line'
+                      )}
+                    >
+                      {resumeCount} {resumeCount === 1 ? 'file' : 'files'}
+                    </span>
+                  )}
 
-              {!collapsed && badgeKey === 'apps' && active && (
-                <span className="ml-auto size-2 animate-pulse rounded-full bg-signal" aria-label="Application running" />
-              )}
+                  {!collapsed && badgeKey === 'apps' && active && (
+                    <span className="ml-auto relative flex size-2 items-center justify-center" title="Application running">
+                      <span className="absolute size-2 rounded-full bg-signal animate-ping opacity-75" />
+                      <span className="relative size-2 rounded-full bg-signal" />
+                    </span>
+                  )}
 
-              {!collapsed && badgeKey === 'review' && reviewCount > 0 && (
-                <span
-                  className="ml-auto inline-flex items-center justify-center rounded-full bg-amber-soft px-2 py-0.5 text-[11px] font-semibold text-amber tabular-nums border border-amber/30 animate-pulse"
-                  title={`${reviewCount} screener questions waiting for review`}
-                >
-                  {reviewCount}
-                </span>
-              )}
+                  {!collapsed && badgeKey === 'review' && reviewCount > 0 && (
+                    <span
+                      className="ml-auto inline-flex items-center justify-center rounded-full bg-amber-soft px-2 py-0.5 text-[11px] font-semibold text-amber tabular-nums border border-amber/30 animate-pulse shadow-xs"
+                      title={`${reviewCount} screener questions waiting for review`}
+                    >
+                      {reviewCount}
+                    </span>
+                  )}
 
-              {/* Badges - collapsed mode */}
-              {collapsed && badgeKey === 'resumes' && resumeCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-signal" title={`${resumeCount} files`} />
-              )}
-              {collapsed && badgeKey === 'apps' && active && (
-                <span className="absolute top-1.5 right-1.5 size-2 animate-pulse rounded-full bg-signal" />
-              )}
-              {collapsed && badgeKey === 'review' && reviewCount > 0 && (
-                <span
-                  className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber px-1 text-[9px] font-bold text-white shadow-xs"
-                  title={`${reviewCount} screener questions`}
-                >
-                  {reviewCount}
-                </span>
+                  {/* Badges - collapsed mode */}
+                  {collapsed && badgeKey === 'resumes' && resumeCount > 0 && (
+                    <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-signal ring-2 ring-paper" title={`${resumeCount} files`} />
+                  )}
+                  {collapsed && badgeKey === 'apps' && active && (
+                    <span className="absolute top-1.5 right-1.5 size-2 animate-pulse rounded-full bg-signal ring-2 ring-paper" />
+                  )}
+                  {collapsed && badgeKey === 'review' && reviewCount > 0 && (
+                    <span
+                      className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber px-1 text-[9px] font-bold text-white shadow-xs"
+                      title={`${reviewCount} screener questions`}
+                    >
+                      {reviewCount}
+                    </span>
+                  )}
+                </>
               )}
             </NavLink>
           ))}
         </div>
 
-        <div>
-          {collapsed ? (
-            <div className="my-2 mx-auto w-8 h-px bg-line" />
-          ) : (
-            <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-soft/70">Automation Boards</p>
-          )}
-
-          <div className="space-y-1">
-            {BOARD_REGISTRY.map((b) =>
-              b.enabled ? (
-                <NavLink
-                  key={b.key}
-                  to={`/boards/${b.key}`}
-                  onClick={close}
-                  title={b.name}
-                  className={collapsed ? collapsedLinkCls : linkCls}
-                >
-                  <Briefcase className="size-[18px] shrink-0" />
-                  {!collapsed && <span className="truncate">{b.name}</span>}
-                  {b.key === 'dice' && diceStatus?.is_connected && (
-                    <span
-                      className={cn(
-                        'rounded-full bg-signal',
-                        collapsed ? 'absolute top-1.5 right-1.5 size-2 ring-2 ring-paper' : 'ml-auto size-2'
-                      )}
-                      title="Dice connected"
-                    />
-                  )}
-                </NavLink>
-              ) : (
-                <div
-                  key={b.key}
-                  title={`${b.name} (Coming Soon)`}
+        {/* Bottom Section: Settings */}
+        <div className="pt-3 mt-auto border-t border-line/60">
+          <NavLink
+            to="/settings"
+            onClick={close}
+            title={collapsed ? 'Settings' : undefined}
+            className={collapsed ? collapsedLinkCls : linkCls}
+          >
+            {({ isActive }) => (
+              <>
+                <Settings
                   className={cn(
-                    collapsed
-                      ? 'flex size-10 mx-auto items-center justify-center rounded-control text-ink-soft/40 cursor-not-allowed'
-                      : 'flex items-center gap-3 rounded-control px-3 py-2 text-sm text-ink-soft/50'
+                    'size-[18px] shrink-0 transition-transform duration-300 group-hover:rotate-45',
+                    isActive ? 'text-signal-deep' : 'text-ink-soft/80 group-hover:text-ink'
                   )}
-                  aria-disabled
-                >
-                  <Briefcase className="size-[18px] shrink-0" />
-                  {!collapsed && <span className="truncate">{b.name}</span>}
-                  {!collapsed && (
-                    <span className="ml-auto text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-paper-sunken border border-line/60">
-                      Soon
-                    </span>
-                  )}
-                </div>
-              )
+                />
+                {!collapsed && <span className="truncate">Settings</span>}
+              </>
             )}
-          </div>
+          </NavLink>
         </div>
       </nav>
     </div>
