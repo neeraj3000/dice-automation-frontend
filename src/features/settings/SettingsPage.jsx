@@ -433,7 +433,7 @@ export default function SettingsPage() {
                           icon={PlugZap}
                           onClick={() => setConnectModalOpen(true)}
                         >
-                          Connect Dice
+                          Sign in to Dice
                         </Button>
                       )}
                     </div>
@@ -471,15 +471,25 @@ export default function SettingsPage() {
 
                   {/* Connected Details Bar */}
                   {diceStatus?.is_connected && (
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 pt-2">
+                    <div className={`grid grid-cols-1 gap-3 pt-2 ${diceStatus.email ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
                       <div className="rounded-control border border-line bg-paper-sunken p-3">
                         <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-soft">
                           Candidate
                         </p>
-                        <p className="font-semibold text-sm text-ink mt-0.5">
+                        <p className="font-semibold text-sm text-ink mt-0.5 truncate" title={diceStatus.username || 'Active Candidate'}>
                           {diceStatus.username || 'Active Candidate'}
                         </p>
                       </div>
+                      {diceStatus.email && (
+                        <div className="rounded-control border border-line bg-paper-sunken p-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-soft">
+                            Dice Email
+                          </p>
+                          <p className="font-semibold text-sm text-ink mt-0.5 truncate" title={diceStatus.email}>
+                            {diceStatus.email}
+                          </p>
+                        </div>
+                      )}
                       <div className="rounded-control border border-line bg-paper-sunken p-3">
                         <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-soft">
                           Synced Cookies
@@ -506,7 +516,7 @@ export default function SettingsPage() {
                       icon={PlugZap}
                       onClick={() => setConnectModalOpen(true)}
                     >
-                      {diceStatus?.is_connected ? 'Re-Sync Session' : 'Connect Dice Account'}
+                      {diceStatus?.is_connected ? 'Re-Sync Session' : 'Sign in to Dice'}
                     </Button>
                   </div>
                 </CardBody>

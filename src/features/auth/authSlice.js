@@ -21,6 +21,8 @@ const slice = createSlice({
       try {
         localStorage.removeItem('a2h_user');
         localStorage.removeItem('a2h_token');
+        localStorage.removeItem('dice_session');
+        localStorage.removeItem('dice_account');
         window.postMessage({ type: 'APPLY2HIRE_AUTH_LOGOUT' }, '*');
       } catch (_) {}
       return { status: 'unauthenticated', token: null, user: null };

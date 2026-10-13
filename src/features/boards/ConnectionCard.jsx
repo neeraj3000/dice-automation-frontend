@@ -34,12 +34,18 @@ export default function ConnectionCard({ boardKey, name }) {
 
   const board = boards?.find((b) => b.key === boardKey);
   const isConnected = boardKey === 'dice'
-    ? (board?.status === 'CONNECTED' || Boolean(diceStatus?.is_connected))
+    ? Boolean(diceStatus?.is_connected)
     : board?.status === 'CONNECTED';
-  const status = isConnected ? 'CONNECTED' : (board?.status ?? 'DISCONNECTED');
+  const status = isConnected ? 'CONNECTED' : (board?.status === 'ERROR' ? 'ERROR' : 'DISCONNECTED');
 
-  const displayUsername = (boardKey === 'dice' ? diceStatus?.username : null) || board?.username || board?.account_name || 'Dice Candidate';
-  const displayEmail = (boardKey === 'dice' ? (diceStatus?.email || diceStatus?.username) : null) || board?.email || board?.account_email || '';
+  const displayUsername = (boardKey === 'dice'
+    ? (diceStatus?.username || 'Dice Candidate')
+    : (board?.username || board?.account_name || 'Candidate')
+  );
+  const displayEmail = (boardKey === 'dice'
+    ? (diceStatus?.email || '')
+    : (board?.email || board?.account_email || '')
+  );
   const displayCookiesCount = (boardKey === 'dice' && diceStatus?.cookies_count) ? diceStatus.cookies_count : (board?.cookies_count || 20);
 
   const [verifyMutation, { isLoading: verifyingMutation }] = useVerifyBoardMutation();
@@ -198,7 +204,7 @@ export default function ConnectionCard({ boardKey, name }) {
                     icon={PlugZap}
                     onClick={() => setConnectModalOpen(true)}
                   >
-                    Connect {name}
+                    Sign in to {name}
                   </Button>
                 </>
               )}
@@ -345,10 +351,12 @@ export default function ConnectionCard({ boardKey, name }) {
                     <User className="size-3.5 text-signal" />
                     <span>Candidate: <strong className="text-ink">{displayUsername}</strong></span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Mail className="size-3.5 text-signal" />
-                    <span className="truncate">Email: <strong className="text-ink" title={displayEmail}>{displayEmail}</strong></span>
-                  </div>
+                  {displayEmail ? (
+                    <div className="flex items-center gap-2">
+                      <Mail className="size-3.5 text-signal" />
+                      <span className="truncate">Email: <strong className="text-ink" title={displayEmail}>{displayEmail}</strong></span>
+                    </div>
+                  ) : null}
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="size-3.5 text-signal" />
                     <span>Status: <strong className="text-signal">Active ({displayCookiesCount} cookies)</strong></span>

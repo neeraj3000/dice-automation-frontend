@@ -14,7 +14,7 @@ export default function BoardPage() {
   const { diceStatus } = useDice();
   if (!meta?.enabled) return <Navigate to="/" replace />;
   const connected = boardKey === 'dice'
-    ? (boards?.find((b) => b.key === boardKey)?.status === 'CONNECTED' || Boolean(diceStatus?.is_connected))
+    ? Boolean(diceStatus?.is_connected)
     : boards?.find((b) => b.key === boardKey)?.status === 'CONNECTED';
 
   return (

@@ -19,6 +19,7 @@ export function DiceProvider({ children }) {
     connected: false,
     status: 'LOGIN_REQUIRED',
     username: '',
+    email: '',
     cookies_count: 0,
     last_verified: null,
   });
@@ -45,8 +46,38 @@ export function DiceProvider({ children }) {
     }
   }, []);
 
+  // Reset diceStatus immediately whenever user logs out or has no credentials
+  useEffect(() => {
+    if (!token || !user) {
+      setDiceStatus({
+        is_connected: false,
+        connected: false,
+        status: 'LOGIN_REQUIRED',
+        username: '',
+        email: '',
+        cookies_count: 0,
+        last_verified: null,
+      });
+      setIsWaitingForLogin(false);
+    }
+  }, [token, user]);
+
   // Refresh Dice session status
   const refreshDiceStatus = useCallback(async (checkLive = false) => {
+    if (!token || !user) {
+      const disconnectedState = {
+        is_connected: false,
+        connected: false,
+        status: 'LOGIN_REQUIRED',
+        username: '',
+        email: '',
+        cookies_count: 0,
+        last_verified: null,
+      };
+      setDiceStatus(disconnectedState);
+      return disconnectedState;
+    }
+
     setIsChecking(true);
     try {
       const headers = {};
@@ -68,12 +99,12 @@ export function DiceProvider({ children }) {
         sessionData = await sessionRes.value.json().catch(() => null);
       }
 
+      // Dice is ONLY considered connected if actively synced in sessionData for this user
       const isConn = Boolean(
         sessionData?.connected ||
         sessionData?.status === 'CONNECTED' ||
-        sessionData?.status === 'valid' ||
-        legacyData?.is_connected
-      );
+        sessionData?.status === 'valid'
+      ) || (Boolean(legacyData?.is_connected) && legacyData?.status === 'CONNECTED');
 
       const backendUnreachable = legacyRes.status === 'rejected' && sessionRes.status === 'rejected';
 
@@ -81,18 +112,19 @@ export function DiceProvider({ children }) {
         ? 'CONNECTED'
         : backendUnreachable
           ? 'BACKEND_UNREACHABLE'
-          : (sessionData?.status || (legacyData?.is_connected ? 'CONNECTED' : 'LOGIN_REQUIRED'));
+          : (sessionData?.status || (legacyData?.status === 'CONNECTED' ? 'CONNECTED' : 'LOGIN_REQUIRED'));
 
-      const verifiedTimestamp = sessionData?.last_verified_at || legacyData?.last_verified || null;
+      const verifiedTimestamp = isConn ? (sessionData?.last_verified_at || legacyData?.last_verified || null) : null;
 
       const updated = {
         is_connected: isConn,
         connected: isConn,
         status: statusVal,
         last_verified: verifiedTimestamp,
-        username: legacyData?.username || sessionData?.username || '',
-        cookies_count: legacyData?.cookies_count || 0,
-        expires_at: sessionData?.expires_at || null,
+        username: isConn ? (sessionData?.username || legacyData?.username || '') : '',
+        email: isConn ? (sessionData?.email || legacyData?.email || '') : '',
+        cookies_count: isConn ? (sessionData?.cookies_count || legacyData?.cookies_count || 0) : 0,
+        expires_at: isConn ? (sessionData?.expires_at || null) : null,
       };
 
       setDiceStatus(updated);
@@ -103,6 +135,7 @@ export function DiceProvider({ children }) {
         connected: false,
         status: 'LOGIN_REQUIRED',
         username: '',
+        email: '',
         cookies_count: 0,
         last_verified: null,
       };
@@ -128,6 +161,7 @@ export function DiceProvider({ children }) {
         connected: false,
         status: 'DISCONNECTED',
         username: '',
+        email: '',
         cookies_count: 0,
         last_verified: null,
       });
@@ -148,14 +182,17 @@ export function DiceProvider({ children }) {
   // Health and session check interval
   useEffect(() => {
     checkHealth();
-    refreshDiceStatus(false);
+    if (token && user) {
+      refreshDiceStatus(false);
+    }
 
     const hInterval = setInterval(checkHealth, 30000);
     return () => clearInterval(hInterval);
-  }, [checkHealth, refreshDiceStatus]);
+  }, [checkHealth, refreshDiceStatus, token, user]);
 
   // Real-time SSE listener
   useEffect(() => {
+    if (!token || !user) return;
     let eventSource = null;
     try {
       eventSource = new EventSource(SSE_URL);
@@ -165,13 +202,16 @@ export function DiceProvider({ children }) {
           const payload = JSON.parse(event.data);
           if (payload.type === 'INIT_STATE') {
             if (payload.dice_session) {
-              const isConn = Boolean(payload.dice_session.is_connected);
+              const isConn = Boolean(payload.dice_session.is_connected && payload.dice_session.status === 'CONNECTED');
               setDiceStatus((prev) => ({
                 ...prev,
                 ...payload.dice_session,
                 is_connected: isConn,
                 connected: isConn,
                 status: isConn ? 'CONNECTED' : (payload.dice_session.status || 'LOGIN_REQUIRED'),
+                username: isConn ? (payload.dice_session.username || '') : '',
+                email: isConn ? (payload.dice_session.email || '') : '',
+                cookies_count: isConn ? (payload.dice_session.cookies_count || 0) : 0,
               }));
             }
             if (payload.manager_status === 'WAITING_FOR_LOGIN') {
@@ -188,6 +228,7 @@ export function DiceProvider({ children }) {
               connected: true,
               status: 'CONNECTED',
               username: payload.username || '',
+              email: payload.email || '',
               cookies_count: payload.cookies_count || 0,
               last_verified: nowIso,
             };
@@ -204,6 +245,7 @@ export function DiceProvider({ children }) {
               connected: false,
               status: 'DISCONNECTED',
               username: '',
+              email: '',
               cookies_count: 0,
               last_verified: null,
             });
@@ -232,7 +274,7 @@ export function DiceProvider({ children }) {
       window.removeEventListener('focus', handleFocus);
       if (eventSource) eventSource.close();
     };
-  }, [refreshDiceStatus, checkHealth, dispatch]);
+  }, [refreshDiceStatus, checkHealth, dispatch, token, user]);
 
   // Polling fallback while waiting for sign-in
   useEffect(() => {
