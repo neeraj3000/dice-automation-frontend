@@ -41,6 +41,7 @@ import {
 import { useGetSearchProfilesQuery } from '../boards/searchProfilesApi';
 import { useGetResumesQuery } from '../resumes/resumesApi';
 import DirectMatchModal from './DirectMatchModal';
+import { useLazyGetApplicationQuery } from '../applications/applicationsApi';
 
 const PAGE_SIZE = 10;
 
@@ -231,6 +232,7 @@ export default function JobsPage() {
 
   const [applyJob] = useApplyJobMutation();
   const [prepareApp] = usePrepareApplicationMutation();
+  const [fetchApplication] = useLazyGetApplicationQuery();
   const [matchJob] = useMatchJobMutation();
   const [analyzeJob] = useAnalyzeJobMutation();
   const [deleteJob] = useDeleteJobMutation();
@@ -261,7 +263,6 @@ export default function JobsPage() {
   // Single job 1-Click Apply
   const handleApply = async (job) => {
     setActionInProgress(job.id);
-    const toastId = toast.loading(`Submitting 1-Click application to ${job.company || 'employer'}…`);
     try {
       const recId =
         job.match?.resume_id ||
@@ -274,19 +275,14 @@ export default function JobsPage() {
         resume_id: recId,
       }).unwrap();
 
-      toast.dismiss(toastId);
-      if (res?.status === 'APPLIED') {
-        toast.success(`Successfully applied to ${job.title}!`);
-      } else if (res?.status === 'REVIEW') {
-        toast.error('Application paused for review: Screener questions need manual input in Review Queue.');
+      // The run continues in the background; the application watcher announces the outcome.
+      if (res?.status === 'PREPARING') {
+        toast.success(`Applying to ${job.title}. We'll let you know when it's done.`);
       } else if (res?.status === 'FAILED') {
         toast.error(res?.failure_reason || 'Application submission failed.');
-      } else {
-        toast.success(`Application updated: ${res?.status || 'Submitted'}`);
       }
       refetch();
     } catch (err) {
-      toast.dismiss(toastId);
       toast.error(errorMessage(err));
     } finally {
       setActionInProgress(null);
@@ -306,7 +302,7 @@ export default function JobsPage() {
         resume_id: recId,
         mode: 'PREPARE',
       }).unwrap();
-      toast.success('Application form prepared. Review in Applications tab.');
+      toast.success('Preparing the application form. Review it in the Applications tab when it\'s ready.');
       refetch();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -377,10 +373,16 @@ export default function JobsPage() {
           target.match_result?.recommended_resume_id ||
           resumes[0]?.id;
 
-        const res = await applyJob({
+        let res = await applyJob({
           job_id: target.id,
           resume_id: recId,
         }).unwrap();
+
+        // Applications run in the background: wait for this one to finish before starting the next
+        while (res?.status === 'PREPARING' && !abortBatchRef.current) {
+          await new Promise((r) => setTimeout(r, 3000));
+          res = await fetchApplication(res.id).unwrap();
+        }
 
         if (res?.status === 'APPLIED') applied++;
         else if (res?.status === 'REVIEW') review++;
