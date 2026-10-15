@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -34,7 +34,7 @@ import { Logo, Spinner } from '../ui/Misc';
 import { cn } from '../../lib/cn';
 
 const PRIMARY_NAV = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/resumes', label: 'Resume Library', icon: FileText, badgeKey: 'resumes' },
   { to: '/search-profiles', label: 'Search Profiles', icon: SlidersHorizontal },
   { to: '/jobs', label: 'Jobs Explorer', icon: Compass },
@@ -67,14 +67,16 @@ function SidebarContent({ active, reviewCount, resumeCount, isMobile = false, co
       {/* Top Header: Full Brand or Icon Logo */}
       {collapsed ? (
         <div className="flex h-16 items-center justify-center border-b border-line px-2">
-          <NavLink to="/" title="Apply2Hire Dashboard" className="flex items-center justify-center">
+          <Link to="/" title="Apply2Hire Home" aria-label="Apply2Hire Home" className="flex items-center justify-center">
             <Logo variant="icon" className="h-7" />
-          </NavLink>
+          </Link>
         </div>
       ) : (
         <div className="flex h-16 items-center justify-between px-4 border-b border-line">
           <div className="flex items-center gap-2.5 min-w-0">
-            <Logo className="h-6" />
+            <Link to="/" title="Apply2Hire Home" aria-label="Apply2Hire Home" className="flex items-center focus:outline-hidden">
+              <Logo className="h-6" />
+            </Link>
             <span className="rounded-md bg-signal-soft px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-signal-deep shrink-0 border border-signal/15">
               PRO
             </span>
@@ -213,6 +215,7 @@ function SidebarContent({ active, reviewCount, resumeCount, isMobile = false, co
 }
 
 const PAGE_TITLES = {
+  '/dashboard': { title: 'Dashboard', desc: 'Job search, automation metrics, and application activity.' },
   '/': { title: 'Dashboard', desc: 'Job search, automation metrics, and application activity.' },
   '/resumes': { title: 'Resume Library', desc: 'Manage candidate resumes and ATS skill extractions.' },
   '/search-profiles': { title: 'Search Profiles', desc: 'Saved searches you can run any time.' },

@@ -54,7 +54,7 @@ export default function LoginPage() {
   const [googleLogin] = useGoogleLoginMutation();
   const [googleRef, googleWidth] = useWidth();
 
-  if (status === 'authenticated') return <Navigate to={location.state?.from?.pathname || '/'} replace />;
+  if (status === 'authenticated') return <Navigate to={location.state?.from?.pathname || '/dashboard'} replace />;
 
   const copy = COPY[mode];
   const set = (k) => (e) => {
@@ -86,7 +86,7 @@ export default function LoginPage() {
       {/* Form column */}
       <section className="flex min-h-dvh flex-col px-6 py-5 sm:px-10">
         <header className="flex items-center justify-between">
-          <Logo className="h-7" />
+          <Logo to="/" className="h-7" />
           <button
             type="button"
             onClick={toggle}
@@ -180,7 +180,7 @@ export default function LoginPage() {
           <div className="pointer-events-none absolute -bottom-40 -left-20 size-[360px] rounded-full bg-[#61ebd7]/10 blur-[110px]" />
 
           <div className="relative">
-            <Logo onDark className="h-8" />
+            <Logo to="/" onDark className="h-8" />
           </div>
 
           <div className="relative max-w-lg">

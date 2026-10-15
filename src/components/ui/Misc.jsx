@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { cn } from '../../lib/cn';
 
@@ -66,10 +67,10 @@ const LOGO_SRC = {
 // variant: 'full' (icon + wordmark) | 'icon' | 'text'.
 // onDark forces the dark-background artwork (e.g. on the green login hero);
 // otherwise the artwork follows the app's light/dark theme via CSS.
-export function Logo({ variant = 'full', onDark = false, className }) {
+export function Logo({ variant = 'full', onDark = false, className, to }) {
   const src = LOGO_SRC[variant];
   const imgCls = cn('h-full w-auto select-none', variant === 'icon' && 'aspect-square');
-  return (
+  const content = (
     <span className={cn('inline-flex shrink-0 items-center', variant === 'icon' ? 'h-8' : 'h-7', className)}>
       {onDark || src.light === src.dark ? (
         <img src={onDark ? src.dark : src.light} alt="Apply2Hire" className={imgCls} draggable="false" />
@@ -80,5 +81,22 @@ export function Logo({ variant = 'full', onDark = false, className }) {
         </>
       )}
     </span>
+  );
+
+  if (to) {
+    return (
+      <Link to={to} aria-label="Apply2Hire Home" className="inline-flex shrink-0 items-center transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-signal rounded-md">
+        {content}
+      </Link>
+    );
+  }
+  return content;
+}
+
+export function LogoLink({ to = '/', variant = 'full', onDark = false, className, title = 'Apply2Hire Home' }) {
+  return (
+    <Link to={to} title={title} aria-label="Apply2Hire Home" className={cn('inline-flex shrink-0 items-center transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-signal rounded-md', className)}>
+      <Logo variant={variant} onDark={onDark} />
+    </Link>
   );
 }

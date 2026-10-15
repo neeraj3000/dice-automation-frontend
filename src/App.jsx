@@ -9,6 +9,8 @@ import { useRefreshMutation } from './features/auth/authApi';
 import { useTheme } from './hooks/useTheme';
 import { DiceProvider } from './context/DiceContext';
 
+import HomePage from './features/home/HomePage';
+
 const DashboardPage = lazy(() => import('./features/dashboard/DashboardPage'));
 const ResumesPage = lazy(() => import('./features/resumes/ResumesPage'));
 const SearchProfilesPage = lazy(() => import('./features/boards/SearchProfilesPage'));
@@ -42,10 +44,11 @@ export default function App() {
   return (
     <DiceProvider>
       <Routes>
+        <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
-            <Route index element={<DashboardPage />} />
+            <Route path="dashboard" element={<DashboardPage />} />
             <Route path="resumes" element={<ResumesPage />} />
             <Route path="search-profiles" element={<SearchProfilesPage />} />
             <Route path="jobs" element={<JobsPage />} />
