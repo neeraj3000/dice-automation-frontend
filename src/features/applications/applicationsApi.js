@@ -9,6 +9,7 @@ const inv = ['Application', 'Stats'];
 export const applicationsApi = api.injectEndpoints({
   endpoints: (b) => ({
     getApplications: b.query({ query: (params) => ({ url: '/applications', params }), transformResponse: normalizeList, providesTags: ['Application'] }),
+    getApplication: b.query({ query: (id) => `/applications/${id}`, transformResponse: normalizeApp, providesTags: ['Application'] }),
     startApplication: b.mutation({ query: (body) => ({ url: '/applications', method: 'POST', body }), invalidatesTags: inv }),
     submitApplication: b.mutation({ query: (id) => ({ url: `/applications/${id}/submit`, method: 'POST' }), transformResponse: normalizeApp, invalidatesTags: inv }),
     retryApplication: b.mutation({ query: (id) => ({ url: `/applications/${id}/retry`, method: 'POST' }), invalidatesTags: inv }),
@@ -28,5 +29,5 @@ export const applicationsApi = api.injectEndpoints({
   }),
 });
 export const {
-  useGetApplicationsQuery, useStartApplicationMutation, useSubmitApplicationMutation, useRetryApplicationMutation, useStopApplicationMutation, useAnswerApplicationMutation,
+  useGetApplicationsQuery, useLazyGetApplicationQuery, useStartApplicationMutation, useSubmitApplicationMutation, useRetryApplicationMutation, useStopApplicationMutation, useAnswerApplicationMutation,
 } = applicationsApi;

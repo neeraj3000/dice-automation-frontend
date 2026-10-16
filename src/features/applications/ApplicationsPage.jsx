@@ -188,7 +188,7 @@ export default function ApplicationsPage() {
     if (!confirmSubmitApp) return;
     try {
       await submitApp(confirmSubmitApp.id).unwrap();
-      toast.success(`Application submitted to ${confirmSubmitApp.company}!`);
+      toast.success(`Submitting to ${confirmSubmitApp.company}. We'll let you know when it's done.`);
       setConfirmSubmitApp(null);
       refetch();
     } catch (e) {
