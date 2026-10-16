@@ -77,7 +77,7 @@ export default function ProductShowcase() {
           </p>
 
           {/* Mode Switcher Pill Tabs */}
-          <div className="mt-8 inline-flex items-center gap-2 p-1.5 rounded-full bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 shadow-xs">
+          <div className="mt-8 inline-flex items-center gap-2 p-1.5 rounded-full bg-[#faf6ee] dark:bg-stone-800 border border-[#e6dfd1] dark:border-stone-700 shadow-xs">
             <button
               type="button"
               onClick={() => setActiveTab('matches')}
@@ -120,10 +120,10 @@ export default function ProductShowcase() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-40px' }}
           transition={{ duration: 0.6 }}
-          className="rounded-3xl border border-stone-200/90 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-xl overflow-hidden"
+          className="rounded-3xl border border-[#e6dfd1] dark:border-stone-800 bg-[#faf6ee] dark:bg-stone-900 shadow-xl overflow-hidden"
         >
           {/* Mock Browser/App Chrome Header */}
-          <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 bg-stone-50/80 dark:bg-stone-900 px-5 py-3.5">
+          <div className="flex items-center justify-between border-b border-[#e5dfd2] dark:border-stone-800 bg-[#f4efe4] dark:bg-stone-900 px-5 py-3.5">
             <div className="flex items-center gap-2">
               <span className="size-3 rounded-full bg-red-400/80" />
               <span className="size-3 rounded-full bg-amber-400/80" />
@@ -144,7 +144,7 @@ export default function ProductShowcase() {
           </div>
 
           {/* Performance Gauges Row (ATS Score, Keyword Match, Role Fit) */}
-          <div className="border-b border-stone-200 dark:border-stone-800 bg-stone-50/40 dark:bg-stone-900/60 px-6 py-5">
+          <div className="border-b border-[#e5dfd2] dark:border-stone-800 bg-[#faf6ee]/70 dark:bg-stone-900/60 px-6 py-5">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
               {/* Gauge 1 */}
               <div className="flex flex-col items-center">
@@ -238,7 +238,7 @@ export default function ProductShowcase() {
             </div>
 
             {/* Recruiter / Automation Take Banner */}
-            <div className="mt-5 p-3.5 rounded-2xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 flex items-start gap-3">
+            <div className="mt-5 p-3.5 rounded-2xl border border-[#e5dfd2] dark:border-stone-700 bg-white dark:bg-stone-800 flex items-start gap-3 shadow-2xs">
               <span className="text-xs font-bold uppercase tracking-wider text-[#104e43] dark:text-[#4fcfbc] shrink-0 mt-0.5 font-mono">
                 AI MATCH EVALUATION:
               </span>
@@ -265,7 +265,7 @@ export default function ProductShowcase() {
                   {SAMPLE_JOBS.map((job) => (
                     <div
                       key={job.id}
-                      className="group rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800/60 p-4 sm:p-5 transition-all duration-150 hover:border-[#104e43]/40 dark:hover:border-emerald-600/40 hover:shadow-md"
+                      className="group rounded-2xl border border-[#e5dfd2] dark:border-stone-800 bg-white dark:bg-stone-800/60 p-4 sm:p-5 transition-all duration-150 hover:border-[#104e43]/40 dark:hover:border-emerald-600/40 hover:shadow-md"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -286,14 +286,14 @@ export default function ProductShowcase() {
                         {job.skills.map((skill) => (
                           <span
                             key={skill}
-                            className="rounded-full bg-stone-100 dark:bg-stone-700/60 px-2.5 py-0.5 text-xs font-medium text-stone-600 dark:text-stone-300 border border-stone-200/80 dark:border-stone-700"
+                            className="rounded-full bg-[#faf6ee] dark:bg-stone-700/60 px-2.5 py-0.5 text-xs font-medium text-stone-600 dark:text-stone-300 border border-[#e5dfd2] dark:border-stone-700"
                           >
                             {skill}
                           </span>
                         ))}
                       </div>
 
-                      <div className="mt-3.5 pt-3 border-t border-stone-200/80 dark:border-stone-700/80 flex items-center justify-between text-xs text-stone-500">
+                      <div className="mt-3.5 pt-3 border-t border-[#f0ebd9] dark:border-stone-700/80 flex items-center justify-between text-xs text-stone-500">
                         <span className="flex items-center gap-1.5">
                           <FileText className="size-3.5 text-[#104e43] dark:text-[#4fcfbc]" />
                           <span>Matched CV: <strong className="text-stone-800 dark:text-stone-200 font-medium">{job.recommendedResume}</strong></span>
@@ -315,7 +315,7 @@ export default function ProductShowcase() {
                 </div>
 
                 {/* Right: Live Automated Dispatch Preview */}
-                <div className="lg:col-span-5 rounded-2xl border border-stone-200 dark:border-stone-800 bg-stone-50/80 dark:bg-stone-800/40 p-5 sm:p-6 space-y-4">
+                <div className="lg:col-span-5 rounded-2xl border border-[#e5dfd2] dark:border-stone-800 bg-white dark:bg-stone-800/40 p-5 sm:p-6 space-y-4 shadow-xs">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400 font-mono">
                       Dispatcher Execution Log

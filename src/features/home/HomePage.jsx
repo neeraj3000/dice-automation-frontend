@@ -33,7 +33,7 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#f2f6f4] dark:bg-[#0c100e] text-[#161a18] dark:text-[#edf2f0] font-sans antialiased selection:bg-[#e8efe9] selection:text-[#104e43] relative">
+    <div className="min-h-screen bg-[#faf7f2] dark:bg-[#0c100e] text-[#161a18] dark:text-[#edf2f0] font-sans antialiased selection:bg-[#e8efe9] selection:text-[#104e43] relative">
       {/* Engineering Blueprint Grid Overlay matching resume2hire.ai */}
       <div
         className="pointer-events-none fixed inset-0 z-0 opacity-60 dark:opacity-20"
