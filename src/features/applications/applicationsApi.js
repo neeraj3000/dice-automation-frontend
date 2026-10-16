@@ -26,8 +26,31 @@ export const applicationsApi = api.injectEndpoints({
       invalidatesTags: [...inv, 'Job'],
     }),
     answerApplication: b.mutation({ query: ({ id, answers }) => ({ url: `/applications/${id}/answers`, method: 'POST', body: { answers } }), transformResponse: normalizeApp, invalidatesTags: inv }),
+    trackExternalApplication: b.mutation({
+      query: (body) => ({ url: '/applications/external', method: 'POST', body }),
+      transformResponse: normalizeApp,
+      invalidatesTags: inv,
+    }),
+    updateExternalApplication: b.mutation({
+      query: ({ id, ...body }) => ({ url: `/applications/external/${id}`, method: 'PATCH', body }),
+      transformResponse: normalizeApp,
+      invalidatesTags: inv,
+    }),
+    getExternalApplicationHistory: b.query({
+      query: (id) => `/applications/external/${id}/history`,
+      providesTags: (result, error, id) => [{ type: 'Application', id: `${id}-history` }],
+    }),
   }),
 });
 export const {
-  useGetApplicationsQuery, useLazyGetApplicationQuery, useStartApplicationMutation, useSubmitApplicationMutation, useRetryApplicationMutation, useStopApplicationMutation, useAnswerApplicationMutation,
+  useGetApplicationsQuery,
+  useLazyGetApplicationQuery,
+  useStartApplicationMutation,
+  useSubmitApplicationMutation,
+  useRetryApplicationMutation,
+  useStopApplicationMutation,
+  useAnswerApplicationMutation,
+  useTrackExternalApplicationMutation,
+  useUpdateExternalApplicationMutation,
+  useGetExternalApplicationHistoryQuery,
 } = applicationsApi;

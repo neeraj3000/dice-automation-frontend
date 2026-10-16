@@ -3,6 +3,10 @@ export const STATUS_META = {
   REVIEW: { label: 'Needs your input', tone: 'amber' },
   READY: { label: 'Ready to submit', tone: 'signal' },
   APPLIED: { label: 'Applied', tone: 'signal' },
+  DISCOVERED: { label: 'Tracked', tone: 'neutral' },
+  INTERVIEWING: { label: 'Interviewing', tone: 'signal' },
+  OFFER: { label: 'Offer', tone: 'signal' },
+  REJECTED: { label: 'Rejected', tone: 'rust' },
   FAILED: { label: 'Failed', tone: 'rust' },
   CANCELLED: { label: 'Stopped', tone: 'neutral' },
 };
@@ -24,6 +28,10 @@ const UI_STATUS = {
   UPLOADING_RESUME: 'PREPARING',
   SUBMITTING: 'PREPARING',
   CANCELLED: 'CANCELLED',
+  DISCOVERED: 'DISCOVERED',
+  INTERVIEWING: 'INTERVIEWING',
+  OFFER: 'OFFER',
+  REJECTED: 'REJECTED',
 };
 
 export const uiStatus = (status) => UI_STATUS[status] ?? 'FAILED';
