@@ -182,6 +182,21 @@ export default function SettingsPage() {
     }
   };
 
+  const headlessLocked = Boolean(settingsData?.headless_locked);
+
+  // A switch takes effect immediately, without the form's Save button
+  const handleHeadlessToggle = async (show) => {
+    const previous = settings.headless_browser;
+    setSettings((s) => ({ ...s, headless_browser: !show }));
+    try {
+      await updateSettings({ headless_browser: !show }).unwrap();
+      toast.success(show ? 'Browser will be visible on the next run.' : 'Browser will run in the background on the next run.');
+    } catch (err) {
+      setSettings((s) => ({ ...s, headless_browser: previous }));
+      toast.error(errorMessage(err));
+    }
+  };
+
   const handleSaveSettings = async (e) => {
     e.preventDefault();
     try {
@@ -385,13 +400,16 @@ export default function SettingsPage() {
 
                   <div className="pt-2 border-t border-line">
                     <Toggle
-                      checked={!settings.headless_browser}
-                      onChange={(v) => setSettings({ ...settings, headless_browser: !v })}
+                      checked={!headlessLocked && !settings.headless_browser}
+                      onChange={handleHeadlessToggle}
+                      disabled={headlessLocked || savingSettings}
                       label="Show Browser While Applying (Non-Headless)"
                       description={
-                        settings.headless_browser
-                          ? 'Headless: Applications run quietly in the background without opening a browser window.'
-                          : 'Visible: Chromium window opens visibly so you can watch automated form submission in real time.'
+                        headlessLocked
+                          ? 'The server runs browsers in the background (headless). A cloud server has no screen, so a visible browser is only available when the backend runs on your own computer.'
+                          : settings.headless_browser
+                            ? 'Headless: Applications run quietly in the background without opening a browser window.'
+                            : 'Visible: Chromium window opens visibly so you can watch automated form submission in real time.'
                       }
                     />
                   </div>

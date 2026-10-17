@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
 import {
   Briefcase,
   CheckCircle2,
@@ -30,6 +31,7 @@ import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/format';
 import { useDebounce } from '../../hooks/useDebounce';
 import {
+  jobsApi,
   useAnalyzeJobMutation,
   useApplyJobMutation,
   useClearAllJobsMutation,
@@ -41,6 +43,7 @@ import {
 import { useGetSearchProfilesQuery } from '../boards/searchProfilesApi';
 import { useGetResumesQuery } from '../resumes/resumesApi';
 import DirectMatchModal from './DirectMatchModal';
+import ApplyingAnimationModal from './ApplyingAnimationModal';
 import { useLazyGetApplicationQuery } from '../applications/applicationsApi';
 
 const PAGE_SIZE = 10;
@@ -108,14 +111,14 @@ function MatchCell({ score, resumeName }) {
   );
 }
 
-function JobRow({ job, resumes, busy, onApply, onView }) {
+function JobRow({ job, resumes, busy, onApply, onView, isLocallyApplied }) {
   const score = jobScore(job);
   const resumeName =
     job.match_result?.recommended_resume_name ||
     job.match?.resume_name ||
     (job.match?.resume_id && resumes.find((r) => r.id === job.match.resume_id)?.file_name) ||
     null;
-  const isApplied = job.status === 'APPLIED';
+  const isApplied = job.status === 'APPLIED' || isLocallyApplied;
   const listingUrl = job.url || job.job_url;
   const company = job.company || 'Company not listed';
   const location = job.location || 'Remote';
@@ -169,7 +172,7 @@ function JobRow({ job, resumes, busy, onApply, onView }) {
 
       {/* Status */}
       <div className="min-w-0 pl-[54px] lg:pl-0">
-        <JobStatus job={job} score={score} />
+        <JobStatus job={{ ...job, status: isApplied ? 'APPLIED' : job.status }} score={score} />
       </div>
 
       {/* Actions */}
@@ -238,6 +241,15 @@ export default function JobsPage() {
   const [deleteJob] = useDeleteJobMutation();
   const [clearAllJobs, { isLoading: clearing }] = useClearAllJobsMutation();
 
+  const dispatch = useDispatch();
+  const [appliedJobIds, setAppliedJobIds] = useState(() => new Set());
+  const [applyingModal, setApplyingModal] = useState({
+    open: false,
+    job: null,
+    stage: 'applying',
+    message: '',
+  });
+
   const [actionInProgress, setActionInProgress] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
   const [directMatchOpen, setDirectMatchOpen] = useState(false);
@@ -260,9 +272,16 @@ export default function JobsPage() {
   const totalCount = data?.total || jobsList.length || 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
-  // Single job 1-Click Apply
+  // Single job 1-Click Apply with Center Animation and Status Update
   const handleApply = async (job) => {
     setActionInProgress(job.id);
+    setApplyingModal({
+      open: true,
+      job,
+      stage: 'applying',
+      message: `Submitting application to ${job.company || 'employer'}...`,
+    });
+
     try {
       const recId =
         job.match?.resume_id ||
@@ -270,20 +289,107 @@ export default function JobsPage() {
         resumes.find((r) => r.is_default)?.id ||
         resumes[0]?.id;
 
-      const res = await applyJob({
+      let res = await applyJob({
         job_id: job.id,
         resume_id: recId,
       }).unwrap();
 
-      // The run continues in the background; the application watcher announces the outcome.
-      if (res?.status === 'PREPARING') {
-        toast.success(`Applying to ${job.title}. We'll let you know when it's done.`);
-      } else if (res?.status === 'FAILED') {
-        toast.error(res?.failure_reason || 'Application submission failed.');
+      // Poll while PREPARING (with max timeout of 60 seconds)
+      const startTime = Date.now();
+      const MAX_WAIT_MS = 60000;
+
+      while (res?.status === 'PREPARING' && Date.now() - startTime < MAX_WAIT_MS) {
+        await new Promise((r) => setTimeout(r, 1800));
+        try {
+          res = await fetchApplication(res.id).unwrap();
+          if (res?.message) {
+            setApplyingModal((prev) =>
+              prev.open ? { ...prev, message: res.message } : prev
+            );
+          }
+        } catch {
+          // Continue polling if transient request failure
+        }
       }
+
+      if (res?.status === 'FAILED') {
+        const failureReason = res?.failure_reason || 'Application submission failed.';
+        setApplyingModal((prev) =>
+          prev.open
+            ? {
+                ...prev,
+                stage: 'failed',
+                message: failureReason,
+              }
+            : prev
+        );
+        toast.error(failureReason);
+        return;
+      }
+
+      if (res?.status === 'REVIEW') {
+        setApplyingModal((prev) =>
+          prev.open
+            ? {
+                ...prev,
+                stage: 'review',
+                message: 'This application requires manual review for additional employer questions.',
+              }
+            : prev
+        );
+        toast('Application placed in review queue.');
+        refetch();
+        return;
+      }
+
+      // Succeeded: mark as applied
+      setAppliedJobIds((prev) => new Set([...prev, job.id]));
+
+      // Optimistically update RTK Query cache for getJobs
+      try {
+        dispatch(
+          jobsApi.util.updateQueryData('getJobs', queryParams, (draft) => {
+            const item = draft?.items?.find((j) => j.id === job.id);
+            if (item) {
+              item.status = 'APPLIED';
+            }
+          })
+        );
+      } catch (_) {}
+
+      // Update selectedJob modal state if currently inspected
+      setSelectedJob((prev) => (prev?.id === job.id ? { ...prev, status: 'APPLIED' } : prev));
+
+      // Show celebratory success animation
+      setApplyingModal((prev) =>
+        prev.open
+          ? {
+              ...prev,
+              stage: 'success',
+              message: `Successfully applied to ${job.title}!`,
+            }
+          : prev
+      );
+
+      toast.success(`Applied to ${job.title}! Marked as applied.`);
       refetch();
+
+      // Automatically dismiss the success animation after 1.5 seconds
+      setTimeout(() => {
+        setApplyingModal((prev) => (prev.stage === 'success' ? { ...prev, open: false } : prev));
+      }, 1500);
     } catch (err) {
-      toast.error(errorMessage(err));
+      const errTxt = errorMessage(err);
+      setApplyingModal((prev) =>
+        prev.open
+          ? {
+              ...prev,
+              stage: 'failed',
+              message: errTxt,
+            }
+          : prev
+      );
+      toast.error(errTxt);
     } finally {
       setActionInProgress(null);
     }
@@ -326,8 +432,8 @@ export default function JobsPage() {
   };
 
   // Batch Apply All (Current Page)
-  const unappliedOnPage = jobsList.filter((j) => j.status !== 'APPLIED');
-  const appliedJobsCount = jobsList.filter((j) => j.status === 'APPLIED').length;
+  const unappliedOnPage = jobsList.filter((j) => j.status !== 'APPLIED' && !appliedJobIds.has(j.id));
+  const appliedJobsCount = jobsList.filter((j) => j.status === 'APPLIED' || appliedJobIds.has(j.id)).length;
 
   const handleApplyAll = async () => {
     if (applyAllState.isActive) return;
@@ -384,9 +490,14 @@ export default function JobsPage() {
           res = await fetchApplication(res.id).unwrap();
         }
 
-        if (res?.status === 'APPLIED') applied++;
-        else if (res?.status === 'REVIEW') review++;
-        else failed++;
+        if (res?.status === 'APPLIED') {
+          applied++;
+          setAppliedJobIds((prev) => new Set([...prev, target.id]));
+        } else if (res?.status === 'REVIEW') {
+          review++;
+        } else {
+          failed++;
+        }
       } catch {
         failed++;
       } finally {
@@ -656,6 +767,7 @@ export default function JobsPage() {
                   job={job}
                   resumes={resumes}
                   busy={actionInProgress === job.id}
+                  isLocallyApplied={appliedJobIds.has(job.id)}
                   onApply={handleApply}
                   onView={setSelectedJob}
                 />
@@ -713,7 +825,7 @@ export default function JobsPage() {
                 >
                   Re-match Resume
                 </Button>
-                {selectedJob.status !== 'APPLIED' && (
+                {selectedJob.status !== 'APPLIED' && !appliedJobIds.has(selectedJob.id) && (
                   <Button
                     size="sm"
                     variant="secondary"
@@ -728,11 +840,11 @@ export default function JobsPage() {
                   Close
                 </Button>
                 <Button
-                  disabled={selectedJob.status === 'APPLIED'}
+                  disabled={selectedJob.status === 'APPLIED' || appliedJobIds.has(selectedJob.id)}
                   loading={actionInProgress === selectedJob.id}
                   onClick={() => handleApply(selectedJob)}
                 >
-                  {selectedJob.status === 'APPLIED' ? 'Applied' : '1-Click Apply'}
+                  {selectedJob.status === 'APPLIED' || appliedJobIds.has(selectedJob.id) ? 'Applied' : '1-Click Apply'}
                 </Button>
               </div>
             </div>
@@ -841,6 +953,15 @@ export default function JobsPage() {
           Are you sure? This action cannot be undone. You can run fresh searches anytime via Search Profiles.
         </p>
       </Modal>
+
+      {/* Applying Progress Overlay with Center Animation */}
+      <ApplyingAnimationModal
+        open={applyingModal.open}
+        job={applyingModal.job}
+        stage={applyingModal.stage}
+        message={applyingModal.message}
+        onClose={() => setApplyingModal((prev) => ({ ...prev, open: false }))}
+      />
     </div>
   );
 }

@@ -40,6 +40,7 @@ const BASE_FILTERS = [
   ['APPLIED', 'Applied'],
   ['FAILED', 'Failed'],
   ['CANCELLED', 'Stopped'],
+  ['SKIPPED', 'Skipped'],
 ];
 
 function ApplicationRow({ app, onReview, onSubmitConfirm }) {

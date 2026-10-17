@@ -14,6 +14,7 @@ import HomePage from './features/home/HomePage';
 const DashboardPage = lazy(() => import('./features/dashboard/DashboardPage'));
 const ResumesPage = lazy(() => import('./features/resumes/ResumesPage'));
 const SearchProfilesPage = lazy(() => import('./features/boards/SearchProfilesPage'));
+const AutomationsPage = lazy(() => import('./features/automations/AutomationsPage'));
 const JobsPage = lazy(() => import('./features/jobs/JobsPage'));
 const BoardPage = lazy(() => import('./features/boards/BoardPage'));
 const ApplicationsPage = lazy(() => import('./features/applications/ApplicationsPage'));
@@ -51,6 +52,7 @@ export default function App() {
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="resumes" element={<ResumesPage />} />
             <Route path="search-profiles" element={<SearchProfilesPage />} />
+            <Route path="automations" element={<AutomationsPage />} />
             <Route path="jobs" element={<JobsPage />} />
             <Route path="boards/:boardKey" element={<BoardPage />} />
             <Route path="applications" element={<ApplicationsPage />} />

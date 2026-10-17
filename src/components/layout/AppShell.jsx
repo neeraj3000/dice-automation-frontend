@@ -19,12 +19,15 @@ import {
   AlertCircle,
   PanelLeftClose,
   PanelLeftOpen,
+  Bot,
 } from 'lucide-react';
 import { closeSidebar, toggleSidebar, toggleDesktopSidebar } from '../../app/uiSlice';
 import { useTheme } from '../../hooks/useTheme';
 import { useLogoutMutation } from '../../features/auth/authApi';
 import { BOARD_REGISTRY } from '../../features/boards/boardRegistry';
 import { useApplicationWatcher } from '../../features/applications/useApplicationWatcher';
+import { useAutomationWatcher } from '../../features/automations/useAutomationWatcher';
+import { formatClock, useCountdown } from '../../features/automations/runMeta';
 import { useGetApplicationsQuery } from '../../features/applications/applicationsApi';
 import { useGetReviewQueueQuery } from '../../features/review/reviewQueueApi';
 import { useGetResumesQuery } from '../../features/resumes/resumesApi';
@@ -37,6 +40,7 @@ const PRIMARY_NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/resumes', label: 'Resume Library', icon: FileText, badgeKey: 'resumes' },
   { to: '/search-profiles', label: 'Search Profiles', icon: SlidersHorizontal },
+  { to: '/automations', label: 'Automations', icon: Bot, badgeKey: 'automation' },
   { to: '/jobs', label: 'Jobs Explorer', icon: Compass },
   { to: '/applications', label: 'Applications', icon: ListChecks, badgeKey: 'apps' },
   { to: '/review', label: 'Review Queue', icon: HelpCircle, badgeKey: 'review' },
@@ -58,7 +62,7 @@ const collapsedLinkCls = ({ isActive }) =>
       : 'text-ink-soft hover:bg-paper-sunken/80 hover:text-ink border border-transparent'
   );
 
-function SidebarContent({ active, reviewCount, resumeCount, isMobile = false, collapsed = false }) {
+function SidebarContent({ active, automationActive, reviewCount, resumeCount, isMobile = false, collapsed = false }) {
   const dispatch = useDispatch();
   const close = () => dispatch(closeSidebar());
 
@@ -158,6 +162,13 @@ function SidebarContent({ active, reviewCount, resumeCount, isMobile = false, co
                     </span>
                   )}
 
+                  {!collapsed && badgeKey === 'automation' && automationActive && (
+                    <span className="ml-auto relative flex size-2 items-center justify-center" title="Automation running">
+                      <span className="absolute size-2 rounded-full bg-signal animate-ping opacity-75" />
+                      <span className="relative size-2 rounded-full bg-signal" />
+                    </span>
+                  )}
+
                   {!collapsed && badgeKey === 'review' && reviewCount > 0 && (
                     <span
                       className="ml-auto inline-flex items-center justify-center rounded-full bg-amber-soft px-2 py-0.5 text-[11px] font-semibold text-amber tabular-nums border border-amber/30 animate-pulse shadow-xs"
@@ -172,6 +183,9 @@ function SidebarContent({ active, reviewCount, resumeCount, isMobile = false, co
                     <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-signal ring-2 ring-paper" title={`${resumeCount} files`} />
                   )}
                   {collapsed && badgeKey === 'apps' && active && (
+                    <span className="absolute top-1.5 right-1.5 size-2 animate-pulse rounded-full bg-signal ring-2 ring-paper" />
+                  )}
+                  {collapsed && badgeKey === 'automation' && automationActive && (
                     <span className="absolute top-1.5 right-1.5 size-2 animate-pulse rounded-full bg-signal ring-2 ring-paper" />
                   )}
                   {collapsed && badgeKey === 'review' && reviewCount > 0 && (
@@ -219,6 +233,7 @@ const PAGE_TITLES = {
   '/': { title: 'Dashboard', desc: 'Job search, automation metrics, and application activity.' },
   '/resumes': { title: 'Resume Library', desc: 'Manage candidate resumes and ATS skill extractions.' },
   '/search-profiles': { title: 'Search Profiles', desc: 'Saved searches you can run any time.' },
+  '/automations': { title: 'Automations', desc: 'Timed runs that search and apply for you, even with this tab closed.' },
   '/jobs': { title: 'Jobs Explorer', desc: 'Scrape Dice jobs, analyze requirements, and evaluate resumes.' },
   '/applications': { title: 'Applications', desc: 'Track automated submissions and execution logs.' },
   '/review': { title: 'Review Queue', desc: 'Resolve unmapped screener questions to resume submissions.' },
@@ -235,6 +250,8 @@ export default function AppShell() {
   const { dark, toggle } = useTheme();
   const [logout, { isLoading }] = useLogoutMutation();
   const { active } = useApplicationWatcher();
+  const { run: automationRun, receivedAt: automationReceivedAt } = useAutomationWatcher();
+  const automationLeft = useCountdown(automationRun?.remaining_seconds || 0, automationReceivedAt, Boolean(automationRun?.paused));
   const { diceStatus } = useDice();
 
   const { data: apps = [] } = useGetApplicationsQuery();
@@ -274,6 +291,7 @@ export default function AppShell() {
       >
         <SidebarContent
           active={active}
+          automationActive={Boolean(automationRun)}
           reviewCount={reviewCount}
           resumeCount={resumeCount}
           collapsed={!desktopOpen}
@@ -301,6 +319,7 @@ export default function AppShell() {
             >
               <SidebarContent
                 active={active}
+                automationActive={Boolean(automationRun)}
                 reviewCount={reviewCount}
                 resumeCount={resumeCount}
                 collapsed={false}
@@ -329,6 +348,32 @@ export default function AppShell() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Running automation: countdown, visible from every page */}
+          {automationRun && (
+            <button
+              type="button"
+              onClick={() => navigate('/automations')}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition',
+                automationRun.paused
+                  ? 'border-amber/30 bg-amber-soft text-amber hover:bg-amber-soft/80'
+                  : 'border-signal/30 bg-signal-soft text-signal-deep hover:bg-signal-soft/80'
+              )}
+              title={`${automationRun.automation_name} is ${automationRun.paused ? 'paused' : 'running'}`}
+            >
+              {automationRun.paused ? (
+                <span className="size-2 rounded-full bg-amber" />
+              ) : (
+                <span className="relative flex size-2">
+                  <span className="absolute size-2 animate-ping rounded-full bg-signal opacity-75" />
+                  <span className="relative size-2 rounded-full bg-signal" />
+                </span>
+              )}
+              <span className="hidden sm:inline">{automationRun.paused ? 'Paused' : 'Automation'}</span>
+              <span className="font-mono tabular-nums">{formatClock(automationLeft)}</span>
+            </button>
+          )}
+
           {/* Dice Connection Top Chip */}
           <button
             type="button"

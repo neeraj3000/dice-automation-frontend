@@ -5,6 +5,8 @@ export const STATUS_META = {
   APPLIED: { label: 'Applied', tone: 'signal' },
   FAILED: { label: 'Failed', tone: 'rust' },
   CANCELLED: { label: 'Stopped', tone: 'neutral' },
+  // Dice already showed the job as applied, so nothing was submitted
+  SKIPPED: { label: 'Skipped', tone: 'neutral' },
 };
 
 // The backend reports fine-grained runner states (QUEUED, SUBMITTING, SUBMITTED, ...);
@@ -24,6 +26,7 @@ const UI_STATUS = {
   UPLOADING_RESUME: 'PREPARING',
   SUBMITTING: 'PREPARING',
   CANCELLED: 'CANCELLED',
+  SKIPPED: 'SKIPPED',
 };
 
 export const uiStatus = (status) => UI_STATUS[status] ?? 'FAILED';

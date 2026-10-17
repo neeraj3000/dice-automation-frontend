@@ -7,7 +7,7 @@ export const Spinner = ({ className }) => <Loader2 className={cn('size-5 animate
 
 export const Skeleton = ({ className }) => <div className={cn('animate-pulse rounded-control bg-paper-sunken', className)} />;
 
-export function Toggle({ checked, onChange, label, description }) {
+export function Toggle({ checked, onChange, label, description, disabled }) {
   return (
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0">
@@ -15,8 +15,8 @@ export function Toggle({ checked, onChange, label, description }) {
         {description && <p className="mt-0.5 text-sm text-ink-soft">{description}</p>}
       </div>
       <button
-        type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}
-        className={cn('relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors', checked ? 'bg-signal' : 'bg-line-strong')}
+        type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)}
+        className={cn('relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50', checked ? 'bg-signal' : 'bg-line-strong')}
       >
         <motion.span layout transition={{ type: 'spring', stiffness: 600, damping: 32 }} className={cn('absolute top-0.5 size-5 rounded-full bg-white shadow', checked ? 'right-0.5' : 'left-0.5')} />
       </button>
