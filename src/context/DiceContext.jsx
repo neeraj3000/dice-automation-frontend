@@ -179,28 +179,55 @@ export function DiceProvider({ children }) {
     successCallbackRef.current = cb;
   }, []);
 
-  // Health and session check interval
+  // Initial health and session check. No interval: the SSE stream below reports when the
+  // backend goes away (onerror), and that is when health is re-checked.
   useEffect(() => {
     checkHealth();
     if (token && user) {
       refreshDiceStatus(false);
     }
-
-    const hInterval = setInterval(checkHealth, 30000);
-    return () => clearInterval(hInterval);
   }, [checkHealth, refreshDiceStatus, token, user]);
 
   // Real-time SSE listener
   useEffect(() => {
     if (!token || !user) return;
     let eventSource = null;
+    // Server-pushed "data changed" events, batched so a burst of updates causes one refetch
+    let pendingTags = new Set();
+    let flushTimer = null;
+    const invalidateSoon = (tags) => {
+      tags.forEach((t) => pendingTags.add(t));
+      if (flushTimer) return;
+      flushTimer = setTimeout(() => {
+        dispatch(api.util.invalidateTags([...pendingTags]));
+        pendingTags = new Set();
+        flushTimer = null;
+      }, 500);
+    };
+    let hadError = false;
     try {
       eventSource = new EventSource(SSE_URL);
+
+      eventSource.onopen = () => {
+        setDbStatus('connected');
+        // Back after a drop: catch up on anything pushed while we were disconnected
+        if (hadError) invalidateSoon(['AutomationRun', 'Billing']);
+        hadError = false;
+      };
+      eventSource.onerror = () => {
+        // EventSource reconnects by itself; just record whether the backend is reachable
+        if (!hadError) checkHealth();
+        hadError = true;
+      };
 
       eventSource.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
-          if (payload.type === 'INIT_STATE') {
+          if (payload.type === 'AUTOMATION_UPDATED') {
+            invalidateSoon(['AutomationRun']);
+          } else if (payload.type === 'BILLING_UPDATED') {
+            invalidateSoon(['Billing']);
+          } else if (payload.type === 'INIT_STATE') {
             if (payload.dice_session) {
               const isConn = Boolean(payload.dice_session.is_connected && payload.dice_session.status === 'CONNECTED');
               setDiceStatus((prev) => ({
@@ -272,6 +299,7 @@ export function DiceProvider({ children }) {
 
     return () => {
       window.removeEventListener('focus', handleFocus);
+      if (flushTimer) clearTimeout(flushTimer);
       if (eventSource) eventSource.close();
     };
   }, [refreshDiceStatus, checkHealth, dispatch, token, user]);

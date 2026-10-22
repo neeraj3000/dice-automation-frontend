@@ -4,9 +4,11 @@ import toast from 'react-hot-toast';
 import { api } from '../../app/api';
 import { useGetActiveAutomationRunQuery, useLazyGetAutomationRunQuery } from './automationsApi';
 
-const ACTIVE_POLL_MS = 3000;
-// Picks up a run started from another tab or device
-const IDLE_POLL_MS = 20000;
+// The server pushes AUTOMATION_UPDATED over SSE on every run change (see DiceContext), so this
+// is only a safety net while a run is live in case an event is missed. Idle: no polling at all;
+// a run started elsewhere arrives as an event, or on refetch when the tab regains focus.
+const ACTIVE_POLL_MS = 30000;
+const IDLE_POLL_MS = 0;
 
 function notifyFinished(run) {
   const { submitted = 0, review = 0 } = run.counters || {};
@@ -24,7 +26,10 @@ function notifyFinished(run) {
 export function useAutomationWatcher() {
   const dispatch = useDispatch();
   const [poll, setPoll] = useState(IDLE_POLL_MS);
-  const { data: run, fulfilledTimeStamp } = useGetActiveAutomationRunQuery(undefined, { pollingInterval: poll });
+  const { data: run, fulfilledTimeStamp } = useGetActiveAutomationRunQuery(undefined, {
+    pollingInterval: poll,
+    skipPollingIfUnfocused: true,
+  });
   const [fetchRun] = useLazyGetAutomationRunQuery();
   const last = useRef(null);
   const active = Boolean(run);
@@ -36,12 +41,12 @@ export function useAutomationWatcher() {
     if (run) {
       const key = JSON.stringify(run.counters);
       if (prev && prev.id === run.id && prev.key !== key) {
-        dispatch(api.util.invalidateTags(['Application', 'ReviewQueue', 'Job', 'Stats']));
+        dispatch(api.util.invalidateTags(['Application', 'ReviewQueue', 'Job', 'Stats', 'Billing']));
       }
       last.current = { id: run.id, key };
     } else if (prev) {
       last.current = null;
-      dispatch(api.util.invalidateTags(['Application', 'ReviewQueue', 'Job', 'Stats', 'Automation', 'AutomationHistory']));
+      dispatch(api.util.invalidateTags(['Application', 'ReviewQueue', 'Job', 'Stats', 'Automation', 'AutomationHistory', 'Billing']));
       fetchRun(prev.id).unwrap().then(notifyFinished).catch(() => {});
     }
   }, [run, dispatch, fetchRun]);

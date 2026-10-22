@@ -2,12 +2,11 @@ import { Link } from 'react-router-dom';
 import { cn } from '../../../lib/cn';
 import { useGetBillingStatusQuery } from '../billingApi';
 
-// Usage changes as applications run, so keep it fresh while the app is open
-const POLL = { pollingInterval: 60000, refetchOnFocus: true };
-
 // Plan name plus how many applications / search profiles are left, derived from /billing/status.
+// No polling: it refetches when an application finishes, an automation makes progress, the plan
+// changes (BILLING_UPDATED pushed over SSE), or the tab regains focus.
 function usePlanUsage() {
-  const { data: status } = useGetBillingStatusQuery(undefined, POLL);
+  const { data: status } = useGetBillingStatusQuery();
   if (!status) return null;
 
   const expired = status.source === 'none';

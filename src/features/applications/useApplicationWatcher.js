@@ -15,7 +15,7 @@ const MESSAGES = {
 export function useApplicationWatcher() {
   const dispatch = useDispatch();
   const [poll, setPoll] = useState(0);
-  const { data } = useGetApplicationsQuery(undefined, { pollingInterval: poll });
+  const { data } = useGetApplicationsQuery(undefined, { pollingInterval: poll, skipPollingIfUnfocused: true });
   const seen = useRef(null);
   const active = !!data?.some((a) => a.status === 'PREPARING');
 
@@ -33,7 +33,7 @@ export function useApplicationWatcher() {
           if (m) (m.ok ? toast.success : toast.error)(m.text);
         }
       }
-      if (changed) dispatch(api.util.invalidateTags(['Job', 'Stats', 'Board']));
+      if (changed) dispatch(api.util.invalidateTags(['Job', 'Stats', 'Board', 'Billing']));
     }
     seen.current = next;
   }, [data, dispatch]);
