@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ShieldCheck } from 'lucide-react';
 import { PageHeader } from '../../components/ui/Misc';
-import { useConfirmCheckoutSessionMutation, useGetBillingStatusQuery } from './billingApi';
+import { useConfirmCheckoutSessionMutation, useGetBillingStatusQuery, useSyncSubscriptionMutation } from './billingApi';
 import BillingHistory from './components/BillingHistory';
 import CurrentPlanCard from './components/CurrentPlanCard';
 import PlanGrid from './components/PlanGrid';
@@ -13,15 +13,22 @@ import PlanGrid from './components/PlanGrid';
 function useCheckoutReturn() {
   const [params, setParams] = useSearchParams();
   const [confirm] = useConfirmCheckoutSessionMutation();
+  const [sync] = useSyncSubscriptionMutation();
   const handled = useRef(false);
 
   useEffect(() => {
     const result = params.get('checkout');
-    if (!result || handled.current) return;
+    const fromPortal = params.get('portal') === 'return';
+    if ((!result && !fromPortal) || handled.current) return;
     handled.current = true;
     const sessionId = params.get('session_id');
     setParams({}, { replace: true });
 
+    // Back from the Customer Portal: pull any plan change straight from Stripe
+    if (fromPortal) {
+      sync();
+      return;
+    }
     if (result === 'cancelled') {
       toast('Checkout cancelled. You have not been charged.');
       return;
@@ -32,7 +39,7 @@ function useCheckoutReturn() {
         .then(() => toast.success('Subscription active. Thanks for upgrading!'))
         .catch(() => toast('Payment received. Your plan will update in a moment.'));
     }
-  }, [params, setParams, confirm]);
+  }, [params, setParams, confirm, sync]);
 }
 
 function Section({ title, description, children }) {

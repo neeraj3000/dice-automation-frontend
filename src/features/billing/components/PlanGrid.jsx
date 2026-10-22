@@ -20,8 +20,8 @@ export default function PlanGrid({ status }) {
     return <EmptyState icon={CreditCard} title="Plans unavailable" description="We couldn't load plans right now. Please try again shortly." />;
   }
 
-  // The free trial card is only relevant until someone subscribes
-  const visible = status?.source === 'subscription' ? plans.filter((p) => !p.is_trial) : plans;
+  // Always show every plan, including the free trial; the current one is marked with a badge
+  const visible = plans;
   const isCurrent = (plan) =>
     status?.source === 'subscription' ? status.plan?.key === plan.key : plan.is_trial && status?.source === 'trial';
 

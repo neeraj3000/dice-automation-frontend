@@ -61,7 +61,9 @@ export function PlanAction({ plan, status, pendingPriceId, onCheckout, onPortal,
   const isCurrent = subscribed ? status.plan?.key === plan.key : plan.is_trial && status?.source === 'trial';
 
   if (isCurrent) return <Button variant="secondary" className="w-full" disabled>Your current plan</Button>;
-  if (plan.is_trial) return <Button variant="secondary" className="w-full" disabled>Trial ended</Button>;
+  if (plan.is_trial) {
+    return <Button variant="secondary" className="w-full" disabled>{subscribed ? 'Trial used' : 'Trial ended'}</Button>;
+  }
   if (subscribed) {
     // Plan changes go through the Stripe Customer Portal, which handles proration
     return <Button variant="secondary" className="w-full" loading={portalLoading} onClick={onPortal}>Switch to {plan.name}</Button>;

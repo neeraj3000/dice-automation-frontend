@@ -25,6 +25,10 @@ export const billingApi = api.injectEndpoints({
     createPortalSession: b.mutation({
       query: () => ({ url: '/billing/portal-session', method: 'POST' }),
     }),
+    syncSubscription: b.mutation({
+      query: () => ({ url: '/billing/sync', method: 'POST' }),
+      invalidatesTags: ['Billing'],
+    }),
   }),
 });
 
@@ -35,4 +39,5 @@ export const {
   useCreateCheckoutSessionMutation,
   useConfirmCheckoutSessionMutation,
   useCreatePortalSessionMutation,
+  useSyncSubscriptionMutation,
 } = billingApi;
