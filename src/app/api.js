@@ -19,6 +19,7 @@ export const api = createApi({
     'Automation',
     'AutomationRun',
     'AutomationHistory',
+    'Billing',
   ],
   keepUnusedDataFor: 120,
   refetchOnFocus: true,

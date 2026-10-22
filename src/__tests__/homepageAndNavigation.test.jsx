@@ -6,6 +6,7 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { api } from '../app/api';
 import authReducer from '../features/auth/authSlice';
 import uiReducer from '../app/uiSlice';
+import billingReducer from '../features/billing/billingSlice';
 import HomePage from '../features/home/HomePage';
 import AppShell from '../components/layout/AppShell';
 import ProtectedRoute from '../features/auth/ProtectedRoute';
@@ -26,6 +27,7 @@ function createTestStore(initialAuthState = {}) {
       [api.reducerPath]: api.reducer,
       auth: authReducer,
       ui: uiReducer,
+      billing: billingReducer,
     },
     middleware: (getDefault) =>
       getDefault({

@@ -1,5 +1,7 @@
 import { fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import { loggedOut, setCredentials } from '../features/auth/authSlice';
+import { upgradePromptOpened } from '../features/billing/billingSlice';
+import { PLAN_LIMIT_STATUS } from '../features/billing/billingUtils';
 
 const raw = fetchBaseQuery({
   baseUrl: import.meta.env.VITE_API_URL || '/api/v1',
@@ -25,6 +27,10 @@ export const baseQueryWithReauth = async (args, api, extra) => {
     } else {
       api.dispatch(loggedOut());
     }
+  }
+  // Plan limit reached anywhere in the app: show one global upgrade prompt
+  if (result.error?.status === PLAN_LIMIT_STATUS) {
+    api.dispatch(upgradePromptOpened(result.error.data?.detail));
   }
   return result;
 };

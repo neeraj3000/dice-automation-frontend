@@ -20,6 +20,7 @@ const BoardPage = lazy(() => import('./features/boards/BoardPage'));
 const ApplicationsPage = lazy(() => import('./features/applications/ApplicationsPage'));
 const ReviewQueuePage = lazy(() => import('./features/review/ReviewQueuePage'));
 const SettingsPage = lazy(() => import('./features/settings/SettingsPage'));
+const BillingPage = lazy(() => import('./features/billing/BillingPage'));
 
 export default function App() {
   const [refresh] = useRefreshMutation();
@@ -58,6 +59,7 @@ export default function App() {
             <Route path="applications" element={<ApplicationsPage />} />
             <Route path="review" element={<ReviewQueuePage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="billing" element={<BillingPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

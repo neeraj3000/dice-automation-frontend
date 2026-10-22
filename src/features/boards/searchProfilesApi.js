@@ -1,4 +1,5 @@
 import { api } from '../../app/api';
+import { PLAN_LIMIT_STATUS } from '../billing/billingUtils';
 
 const LOCAL_STORAGE_KEY = 'a2h_search_profiles';
 
@@ -42,12 +43,14 @@ export const searchProfilesApi = api.injectEndpoints({
     }),
     createSearchProfile: b.mutation({
       query: (body) => ({ url: '/search-profiles', method: 'POST', body }),
-      invalidatesTags: ['SearchProfile', 'Stats'],
+      invalidatesTags: ['SearchProfile', 'Stats', 'Billing'],
       async onQueryStarted(arg, { queryFulfilled }) {
         try {
           const { data } = await queryFulfilled;
           saveLocalProfile(data);
-        } catch {
+        } catch (err) {
+          // A plan-limit rejection must not be saved as an offline local profile
+          if (err?.error?.status === PLAN_LIMIT_STATUS) return;
           saveLocalProfile({
             ...arg,
             id: `local_${Date.now()}`,
@@ -74,7 +77,7 @@ export const searchProfilesApi = api.injectEndpoints({
     }),
     deleteSearchProfile: b.mutation({
       query: (id) => ({ url: `/search-profiles/${id}`, method: 'DELETE' }),
-      invalidatesTags: ['SearchProfile', 'Stats'],
+      invalidatesTags: ['SearchProfile', 'Stats', 'Billing'],
       async onQueryStarted(id, { queryFulfilled }) {
         removeLocalProfile(id);
         try {

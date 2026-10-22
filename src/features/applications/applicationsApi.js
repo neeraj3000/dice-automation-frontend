@@ -5,7 +5,7 @@ import { uiStatus } from './statusMeta';
 export const normalizeApp = (a) => (a && a.status ? { ...a, raw_status: a.status, status: uiStatus(a.status) } : a);
 const normalizeList = (data) => (Array.isArray(data) ? data.map(normalizeApp) : data);
 
-const inv = ['Application', 'Stats'];
+const inv = ['Application', 'Stats', 'Billing'];
 export const applicationsApi = api.injectEndpoints({
   endpoints: (b) => ({
     getApplications: b.query({ query: (params) => ({ url: '/applications', params }), transformResponse: normalizeList, providesTags: ['Application'] }),

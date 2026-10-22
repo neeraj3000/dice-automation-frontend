@@ -20,6 +20,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Bot,
+  CreditCard,
 } from 'lucide-react';
 import { closeSidebar, toggleSidebar, toggleDesktopSidebar } from '../../app/uiSlice';
 import { useTheme } from '../../hooks/useTheme';
@@ -33,6 +34,8 @@ import { useGetReviewQueueQuery } from '../../features/review/reviewQueueApi';
 import { useGetResumesQuery } from '../../features/resumes/resumesApi';
 import { useGetProfileQuery } from '../../features/settings/settingsApi';
 import { useDice } from '../../context/DiceContext';
+import PlanBadge from '../../features/billing/components/PlanBadge';
+import UpgradeModal from '../../features/billing/components/UpgradeModal';
 import { Logo, Spinner } from '../ui/Misc';
 import { cn } from '../../lib/cn';
 
@@ -81,9 +84,7 @@ function SidebarContent({ active, automationActive, reviewCount, resumeCount, is
             <Link to="/" title="Apply2Hire Home" aria-label="Apply2Hire Home" className="flex items-center focus:outline-hidden">
               <Logo className="h-6" />
             </Link>
-            <span className="rounded-md bg-signal-soft px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-signal-deep shrink-0 border border-signal/15">
-              PRO
-            </span>
+            <PlanBadge onClick={close} />
           </div>
           <button
             type="button"
@@ -202,8 +203,26 @@ function SidebarContent({ active, automationActive, reviewCount, resumeCount, is
           ))}
         </div>
 
-        {/* Bottom Section: Settings */}
-        <div className="pt-3 mt-auto border-t border-line/60">
+        {/* Bottom Section: Billing & Settings */}
+        <div className="pt-3 mt-auto space-y-1.5 border-t border-line/60">
+          <NavLink
+            to="/billing"
+            onClick={close}
+            title={collapsed ? 'Plan & Billing' : undefined}
+            className={collapsed ? collapsedLinkCls : linkCls}
+          >
+            {({ isActive }) => (
+              <>
+                <CreditCard
+                  className={cn(
+                    'size-[18px] shrink-0 transition-colors',
+                    isActive ? 'text-signal-deep' : 'text-ink-soft/80 group-hover:text-ink'
+                  )}
+                />
+                {!collapsed && <span className="truncate">Plan & Billing</span>}
+              </>
+            )}
+          </NavLink>
           <NavLink
             to="/settings"
             onClick={close}
@@ -237,6 +256,7 @@ const PAGE_TITLES = {
   '/jobs': { title: 'Jobs Explorer', desc: 'Scrape Dice jobs, analyze requirements, and evaluate resumes.' },
   '/applications': { title: 'Applications', desc: 'Track automated submissions and execution logs.' },
   '/review': { title: 'Review Queue', desc: 'Resolve unmapped screener questions to resume submissions.' },
+  '/billing': { title: 'Plan & Billing', desc: 'Your plan, usage, and subscription.' },
   '/settings': { title: 'Settings', desc: 'Configure candidate profile, automation parameters, and Dice session.' },
 };
 
@@ -445,6 +465,7 @@ export default function AppShell() {
           </motion.div>
         </Suspense>
       </main>
+      <UpgradeModal />
     </div>
   );
 }
