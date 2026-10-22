@@ -7,6 +7,14 @@ import { SUBSCRIPTION_STATUS, daysLeft, formatDate, formatPrice } from '../billi
 import { useBillingRedirect } from '../hooks/useBillingRedirect';
 import UsageMeter from './UsageMeter';
 
+// " (in 6h 20m)" until the daily reset, or "" when unknown
+function resetsIn(iso) {
+  const mins = iso ? Math.max(0, Math.round((new Date(iso).getTime() - Date.now()) / 60000)) : null;
+  if (mins === null) return '';
+  const h = Math.floor(mins / 60);
+  return ` (in ${h ? `${h}h ` : ''}${mins % 60}m)`;
+}
+
 function Detail({ label, children }) {
   return (
     <div>
@@ -91,7 +99,7 @@ export default function CurrentPlanCard({ status, isLoading }) {
             limit={applications.limit}
             hint={
               applications.period === 'day'
-                ? `Resets ${new Date(applications.resets_at).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}`
+                ? `Resets at midnight, your time${resetsIn(applications.resets_at)}`
                 : applications.period === 'trial' ? 'Across your whole trial' : undefined
             }
           />

@@ -9,6 +9,9 @@ const raw = fetchBaseQuery({
   prepareHeaders: (headers, { getState }) => {
     const token = getState().auth.token;
     if (token) headers.set('authorization', `Bearer ${token}`);
+    // The user's timezone (e.g. "Asia/Kolkata") so daily plan limits reset at their local midnight
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) headers.set('x-timezone', tz);
     return headers;
   },
 });

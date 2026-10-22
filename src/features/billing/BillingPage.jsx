@@ -6,6 +6,7 @@ import { PageHeader } from '../../components/ui/Misc';
 import { useConfirmCheckoutSessionMutation, useGetBillingStatusQuery, useSyncSubscriptionMutation } from './billingApi';
 import BillingHistory from './components/BillingHistory';
 import CurrentPlanCard from './components/CurrentPlanCard';
+import HowItWorks from './components/HowItWorks';
 import PlanGrid from './components/PlanGrid';
 
 // Handles the return from Stripe Checkout: confirms the session right away so the new plan
@@ -72,6 +73,8 @@ export default function BillingPage() {
           Payments are processed securely by Stripe. We never store your card details.
         </p>
       </Section>
+
+      <HowItWorks />
 
       <Section title="Billing history" description="Your invoices and receipts.">
         <BillingHistory />

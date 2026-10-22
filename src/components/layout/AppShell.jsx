@@ -35,6 +35,7 @@ import { useGetResumesQuery } from '../../features/resumes/resumesApi';
 import { useGetProfileQuery } from '../../features/settings/settingsApi';
 import { useDice } from '../../context/DiceContext';
 import PlanBadge from '../../features/billing/components/PlanBadge';
+import { SidebarPlanUsage, TopbarPlanUsage } from '../../features/billing/components/PlanUsage';
 import UpgradeModal from '../../features/billing/components/UpgradeModal';
 import { Logo, Spinner } from '../ui/Misc';
 import { cn } from '../../lib/cn';
@@ -205,6 +206,7 @@ function SidebarContent({ active, automationActive, reviewCount, resumeCount, is
 
         {/* Bottom Section: Billing & Settings */}
         <div className="pt-3 mt-auto space-y-1.5 border-t border-line/60">
+          <SidebarPlanUsage collapsed={collapsed} onClick={close} />
           <NavLink
             to="/billing"
             onClick={close}
@@ -393,6 +395,9 @@ export default function AppShell() {
               <span className="font-mono tabular-nums">{formatClock(automationLeft)}</span>
             </button>
           )}
+
+          {/* Plan + applications left */}
+          <TopbarPlanUsage />
 
           {/* Dice Connection Top Chip */}
           <button
