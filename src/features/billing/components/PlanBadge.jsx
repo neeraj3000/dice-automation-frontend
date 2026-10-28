@@ -14,15 +14,15 @@ export default function PlanBadge({ onClick }) {
     <Link
       to="/billing"
       onClick={onClick}
-      title="Plan & billing"
+      title={label ? `Plan & billing (${label})` : 'Plan & billing'}
       className={cn(
-        'shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors',
+        'shrink-0 inline-flex items-center justify-center rounded-md border px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider transition-colors max-w-[80px] leading-none',
         expired
           ? 'border-amber/30 bg-amber-soft text-amber hover:bg-amber-soft/80'
           : 'border-signal/15 bg-signal-soft text-signal-deep hover:bg-signal-soft/80',
       )}
     >
-      {label}
+      <span className="truncate">{label}</span>
     </Link>
   );
 }

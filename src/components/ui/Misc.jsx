@@ -70,8 +70,10 @@ const LOGO_SRC = {
 export function Logo({ variant = 'full', onDark = false, className, to }) {
   const src = LOGO_SRC[variant];
   const imgCls = cn('h-full w-auto select-none', variant === 'icon' && 'aspect-square');
+  const hasCustomHeight = className && /\bh-\S+/.test(className);
+  const defaultHeight = variant === 'icon' ? 'h-8' : 'h-7';
   const content = (
-    <span className={cn('inline-flex shrink-0 items-center', variant === 'icon' ? 'h-8' : 'h-7', className)}>
+    <span className={cn('inline-flex shrink-0 items-center', !hasCustomHeight && defaultHeight, className)}>
       {onDark || src.light === src.dark ? (
         <img src={onDark ? src.dark : src.light} alt="Apply2Hire" className={imgCls} draggable="false" />
       ) : (

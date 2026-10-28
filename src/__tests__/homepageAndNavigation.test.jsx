@@ -193,4 +193,43 @@ describe('Homepage & Logo Navigation Suite', () => {
     expect(screen.getByTestId('location-display')).toHaveTextContent('/login');
     expect(screen.getByText('Login Page Screen')).toBeInTheDocument();
   });
+
+  it('verifies Logo respects custom height and does not inject conflicting default height', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Logo className="h-6" />
+      </MemoryRouter>
+    );
+
+    const logoSpan = container.querySelector('span');
+    expect(logoSpan.className).toContain('h-6');
+    expect(logoSpan.className).not.toContain('h-7');
+  });
+
+  it('verifies AppShell desktop sidebar header renders logo with shrink-0', () => {
+    const store = createTestStore({
+      status: 'authenticated',
+      token: 'jwt-xyz',
+      user: { id: 'u123', email: 'pro@test.io' },
+    });
+
+    render(
+      <Provider store={store}>
+        <DiceProvider>
+          <MemoryRouter initialEntries={['/dashboard']}>
+            <Routes>
+              <Route element={<AppShell />}>
+                <Route path="/dashboard" element={<div>Dashboard Workspace Screen</div>} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </DiceProvider>
+      </Provider>
+    );
+
+    const logoLinks = screen.getAllByRole('link', { name: /Apply2Hire Home/i });
+    const fullLogoLink = logoLinks.find(link => link.className.includes('shrink-0'));
+    expect(fullLogoLink).toBeDefined();
+    expect(fullLogoLink.className).toContain('shrink-0');
+  });
 });

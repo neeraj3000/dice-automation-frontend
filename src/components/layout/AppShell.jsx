@@ -80,10 +80,10 @@ function SidebarContent({ active, automationActive, reviewCount, resumeCount, is
           </Link>
         </div>
       ) : (
-        <div className="flex h-16 items-center justify-between px-4 border-b border-line">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <Link to="/" title="Apply2Hire Home" aria-label="Apply2Hire Home" className="flex items-center focus:outline-hidden">
-              <Logo className="h-6" />
+        <div className="flex h-16 items-center justify-between px-3.5 border-b border-line gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Link to="/" title="Apply2Hire Home" aria-label="Apply2Hire Home" className="flex shrink-0 items-center focus:outline-hidden">
+              <Logo className="h-[21px]" />
             </Link>
             <PlanBadge onClick={close} />
           </div>
@@ -92,7 +92,7 @@ function SidebarContent({ active, automationActive, reviewCount, resumeCount, is
             onClick={() => dispatch(isMobile ? closeSidebar() : toggleDesktopSidebar())}
             title={isMobile ? 'Close menu' : 'Collapse sidebar'}
             aria-label={isMobile ? 'Close menu' : 'Collapse sidebar'}
-            className="size-8 flex items-center justify-center rounded-lg text-ink-soft hover:bg-paper-sunken hover:text-ink transition-colors"
+            className="size-7 shrink-0 flex items-center justify-center rounded-lg text-ink-soft hover:bg-paper-sunken hover:text-ink transition-colors"
           >
             <PanelLeftClose className="size-4" />
           </button>
