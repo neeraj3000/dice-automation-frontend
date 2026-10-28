@@ -1,48 +1,79 @@
 import { useRef, useState } from 'react';
 import { Info, Briefcase, CalendarDays, Calculator, ChevronDown } from 'lucide-react';
 import { cn } from '../../../lib/cn';
+import { useGetPlansQuery } from '../billingApi';
+import { formatPrice } from '../billingUtils';
 
-const PLANS = [
+const FALLBACK_PLANS = [
   {
+    key: 'trial',
     name: 'Basic',
     tag: '7-day trial',
     price: 'Free',
+    interval: 'mo',
     perDay: '—',
-    perMonth: '25 total',
+    dailyLimit: null,
+    totalLimit: 25,
+    monthlyFromDaily: null,
     profiles: 1,
     highlight: false,
+    isTrial: true,
   },
   {
+    key: 'starter',
     name: 'Starter',
+    tag: null,
     price: '$9.99',
+    interval: 'mo',
     perDay: '10',
-    perMonth: '220',
+    dailyLimit: 10,
+    totalLimit: null,
+    monthlyFromDaily: 220,
     profiles: 1,
     highlight: false,
+    isTrial: false,
   },
   {
+    key: 'pro',
     name: 'Pro',
+    tag: null,
     price: '$19.99',
+    interval: 'mo',
     perDay: '30',
-    perMonth: '660',
+    dailyLimit: 30,
+    totalLimit: null,
+    monthlyFromDaily: 660,
     profiles: 3,
     highlight: true,
+    isTrial: false,
   },
   {
+    key: 'premium',
     name: 'Premium',
+    tag: null,
     price: '$49.99',
+    interval: 'mo',
     perDay: '85',
-    perMonth: '1,870',
+    dailyLimit: 85,
+    totalLimit: null,
+    monthlyFromDaily: 1870,
     profiles: 5,
     highlight: false,
+    isTrial: false,
   },
   {
+    key: 'ultimate',
     name: 'Ultimate',
+    tag: null,
     price: '$99.99',
+    interval: 'mo',
     perDay: '200',
-    perMonth: '4,400',
+    dailyLimit: 200,
+    totalLimit: null,
+    monthlyFromDaily: 4400,
     profiles: 10,
     highlight: false,
+    isTrial: false,
   },
 ];
 
@@ -60,9 +91,52 @@ function InfoPill({ icon: Icon, label, value }) {
   );
 }
 
-export default function HowItWorks() {
+export default function HowItWorks({ plans: propPlans }) {
   const [open, setOpen] = useState(false);
   const contentRef = useRef(null);
+  const { data: fetchedPlans = [] } = useGetPlansQuery(undefined, {
+    skip: Boolean(propPlans && propPlans.length > 0),
+  });
+
+  const rawPlans = propPlans && propPlans.length > 0 ? propPlans : fetchedPlans;
+
+  const displayPlans =
+    rawPlans && rawPlans.length > 0
+      ? rawPlans.map((plan) => {
+          const isTrial = Boolean(plan.is_trial);
+          const tag = isTrial
+            ? plan.description
+              ? plan.description.replace(/free /i, '')
+              : '7-day trial'
+            : null;
+          const price = isTrial ? 'Free' : formatPrice(plan.unit_amount, plan.currency);
+          const interval = plan.interval === 'month' ? 'mo' : plan.interval || 'mo';
+          const perDay =
+            plan.daily_application_limit != null
+              ? `${plan.daily_application_limit.toLocaleString()}`
+              : '—';
+          const totalLimit = plan.total_application_limit ?? 25;
+          const monthlyFromDaily =
+            plan.daily_application_limit != null
+              ? plan.daily_application_limit * 22
+              : null;
+
+          return {
+            key: plan.key || plan.name,
+            name: plan.name,
+            tag,
+            price,
+            interval,
+            perDay,
+            dailyLimit: plan.daily_application_limit,
+            totalLimit,
+            monthlyFromDaily,
+            profiles: plan.search_profile_limit ?? 1,
+            highlight: Boolean(plan.highlight),
+            isTrial,
+          };
+        })
+      : FALLBACK_PLANS;
 
   return (
     <div className="rounded-card border border-line bg-paper-raised shadow-card overflow-hidden">
@@ -96,7 +170,7 @@ export default function HowItWorks() {
         ref={contentRef}
         className="transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden"
         style={{
-          maxHeight: open ? contentRef.current?.scrollHeight + 'px' : '0px',
+          maxHeight: open ? (contentRef.current?.scrollHeight ? `${contentRef.current.scrollHeight}px` : '1200px') : '0px',
           opacity: open ? 1 : 0,
         }}
       >
@@ -131,9 +205,9 @@ export default function HowItWorks() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {PLANS.map((plan) => (
+                {displayPlans.map((plan) => (
                   <tr
-                    key={plan.name}
+                    key={plan.key || plan.name}
                     className={
                       plan.highlight
                         ? 'bg-signal-soft/30'
@@ -157,7 +231,9 @@ export default function HowItWorks() {
                     </td>
                     <td className="whitespace-nowrap px-5 py-3.5 tabular-nums text-ink">
                       {plan.price}
-                      {plan.price !== 'Free' && <span className="text-ink-soft">/mo</span>}
+                      {!plan.isTrial && plan.price !== 'Free' && (
+                        <span className="text-ink-soft">/{plan.interval}</span>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-5 py-3.5 tabular-nums text-ink">
                       {plan.perDay === '—' ? (
@@ -167,10 +243,14 @@ export default function HowItWorks() {
                       )}
                     </td>
                     <td className="whitespace-nowrap px-5 py-3.5 tabular-nums text-ink">
-                      {plan.name === 'Basic' ? (
-                        <span className="text-ink-soft">25 applications total</span>
+                      {plan.isTrial ? (
+                        <span className="text-ink-soft">
+                          {plan.totalLimit} applications total
+                        </span>
+                      ) : plan.monthlyFromDaily != null ? (
+                        <>{plan.monthlyFromDaily.toLocaleString()} applications</>
                       ) : (
-                        <>{plan.perMonth} applications</>
+                        <span className="text-ink-soft">—</span>
                       )}
                     </td>
                     <td className="whitespace-nowrap px-5 py-3.5 text-center tabular-nums text-ink">
