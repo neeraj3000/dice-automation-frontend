@@ -42,11 +42,11 @@ import { cn } from '../../lib/cn';
 
 const PRIMARY_NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/applications', label: 'Applications', icon: ListChecks, badgeKey: 'apps' },
   { to: '/resumes', label: 'Resume Library', icon: FileText, badgeKey: 'resumes' },
   { to: '/search-profiles', label: 'Search Profiles', icon: SlidersHorizontal },
   { to: '/automations', label: 'Automations', icon: Bot, badgeKey: 'automation' },
   { to: '/jobs', label: 'Jobs Explorer', icon: Compass },
-  { to: '/applications', label: 'Applications', icon: ListChecks, badgeKey: 'apps' },
   { to: '/review', label: 'Review Queue', icon: HelpCircle, badgeKey: 'review' },
 ];
 
@@ -432,19 +432,27 @@ export default function AppShell() {
             <p className="text-xs leading-tight text-ink-soft">{user?.email}</p>
           </div>
 
-          {navAvatarUrl && !navImgError ? (
-            <img
-              src={navAvatarUrl}
-              alt=""
-              referrerPolicy="no-referrer"
-              className="size-8 rounded-full border border-line object-cover shadow-xs"
-              onError={() => setNavImgError(true)}
-            />
-          ) : (
-            <span className="grid size-8 place-items-center rounded-full bg-signal-soft text-xs font-bold text-signal-deep border border-signal/20 shadow-xs">
-              {displayName?.[0]?.toUpperCase() || 'U'}
-            </span>
-          )}
+          <button
+            type="button"
+            onClick={() => navigate('/settings')}
+            title="Profile & Settings"
+            aria-label="Go to settings"
+            className="focus:outline-none rounded-full hover:ring-2 hover:ring-signal/40 transition-all"
+          >
+            {navAvatarUrl && !navImgError ? (
+              <img
+                src={navAvatarUrl}
+                alt=""
+                referrerPolicy="no-referrer"
+                className="size-8 rounded-full border border-line object-cover shadow-xs"
+                onError={() => setNavImgError(true)}
+              />
+            ) : (
+              <span className="grid size-8 place-items-center rounded-full bg-signal-soft text-xs font-bold text-signal-deep border border-signal/20 shadow-xs">
+                {displayName?.[0]?.toUpperCase() || 'U'}
+              </span>
+            )}
+          </button>
 
           <button
             onClick={() => logout()}

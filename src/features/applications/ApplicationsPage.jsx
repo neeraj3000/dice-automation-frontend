@@ -257,7 +257,9 @@ function ApplicationRow({
 
 export default function ApplicationsPage() {
   const navigate = useNavigate();
-  const { data: applications = [], isLoading, isFetching, refetch } = useGetApplicationsQuery();
+  const { data: applications = [], isLoading, isFetching, refetch } = useGetApplicationsQuery(undefined, {
+    refetchOnMountOrArgChange: 30, // Only re-fetch if data is older than 30 seconds
+  });
   const [submitApp, { isLoading: submitting }] = useSubmitApplicationMutation();
 
   const [filter, setFilter] = useState('ALL');
@@ -305,7 +307,7 @@ export default function ApplicationsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 overflow-x-hidden">
       <PageHeader
         title="Application Tracker"
         description="Monitor automated Dice submissions and track user-confirmed LinkedIn applications in one place."
