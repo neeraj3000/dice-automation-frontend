@@ -35,10 +35,10 @@ import {
   useUpdateResumeMutation,
   useUploadResumeMutation,
 } from './resumesApi';
+import ResumePreviewModal, { FileTile } from './ResumePreviewModal';
+import { ACCEPT, MAX_MB, resumeFileError } from './resumeFiles';
 
-const MAX_MB = 20;
 const VISIBLE_SKILLS = 10;
-const ACCEPT = '.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 const customEntries = (r) =>
   r?.custom_fields && typeof r.custom_fields === 'object' && !Array.isArray(r.custom_fields)
@@ -52,15 +52,9 @@ function Dropzone({ onFiles, uploading, inputRef, compact }) {
     if (!fileList || !fileList.length) return;
     const valid = [];
     for (const f of fileList) {
-      if (!/\.(pdf|docx)$/i.test(f.name)) {
-        toast.error(`"${f.name}" is not a PDF or DOCX file.`);
-        continue;
-      }
-      if (f.size > MAX_MB * 1024 * 1024) {
-        toast.error(`"${f.name}" exceeds ${MAX_MB} MB limit.`);
-        continue;
-      }
-      valid.push(f);
+      const error = resumeFileError(f);
+      if (error) toast.error(error);
+      else valid.push(f);
     }
     if (valid.length) onFiles(valid);
   };
@@ -102,16 +96,6 @@ function Dropzone({ onFiles, uploading, inputRef, compact }) {
         accept={ACCEPT}
         onChange={(e) => { validateAndPick(Array.from(e.target.files || [])); e.target.value = ''; }}
       />
-    </div>
-  );
-}
-
-function FileTile({ name }) {
-  const ext = (name?.match(/\.(\w+)$/)?.[1] || 'doc').toUpperCase();
-  return (
-    <div className="relative grid h-12 w-10 shrink-0 place-items-end overflow-hidden rounded-lg border border-line bg-paper-sunken pb-1.5">
-      <span className="absolute right-0 top-0 size-3 rounded-bl-md border-b border-l border-line bg-paper-raised" />
-      <span className={cn('w-full text-center text-[9px] font-bold tracking-wider', ext === 'PDF' ? 'text-rust' : 'text-signal')}>{ext}</span>
     </div>
   );
 }
@@ -219,40 +203,6 @@ function ResumeCard({ r, busy, onPreview, onEdit, onReparse, onReplace, onDefaul
         </div>
       </Card>
     </motion.div>
-  );
-}
-
-function PreviewModal({ resume, onClose }) {
-  if (!resume) return null;
-  const isPdf = /\.pdf$/i.test(resume.file_name || '');
-  const url = resume.cloudinary_url || '';
-  const src = isPdf ? url : (url ? `https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(url)}` : '');
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      wide
-      title={resume.display_name || resume.file_name || 'Resume preview'}
-      description={resume.target_role || undefined}
-      footer={
-        url ? (
-          <a href={url} target="_blank" rel="noreferrer noopener">
-            <Button variant="secondary">Open original</Button>
-          </a>
-        ) : null
-      }
-    >
-      {url ? (
-        <iframe
-          title={`Preview of ${resume.file_name || 'resume'}`}
-          src={src}
-          className="h-[65dvh] w-full rounded-control border border-line bg-white"
-        />
-      ) : (
-        <div className="py-12 text-center text-sm text-ink-soft">No preview is available for this resume.</div>
-      )}
-    </Modal>
   );
 }
 
@@ -710,7 +660,7 @@ export default function ResumesPage() {
         )}
       </div>
 
-      {preview && <PreviewModal resume={preview} onClose={() => setPreview(null)} />}
+      <ResumePreviewModal resume={preview} onClose={() => setPreview(null)} />
       {editing && <EditModal key={editing.id} resume={editing} onClose={() => setEditing(null)} />}
 
       <Modal

@@ -22,10 +22,13 @@ export const resumesApi = api.injectEndpoints({
           arg.forEach((f) => body.append('files', f));
         } else if (arg instanceof File) {
           body.append('file', arg);
+        } else if (arg?.file instanceof File) {
+          body.append('file', arg.file);
         } else if (arg?.files && Array.isArray(arg.files)) {
           arg.files.forEach((f) => body.append('files', f));
         }
-        return { url: '/resumes/upload', method: 'POST', body };
+        const params = arg?.rejectDuplicates ? { reject_duplicates: true } : undefined;
+        return { url: '/resumes/upload', method: 'POST', body, params };
       },
       invalidatesTags: ['Resume', 'Stats'],
     }),

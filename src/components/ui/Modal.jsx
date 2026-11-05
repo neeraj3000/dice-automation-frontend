@@ -3,6 +3,23 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { cn } from '../../lib/cn';
 
+// Counted, not saved per modal: with modals stacked, one could otherwise remember "hidden" as the
+// page's normal state and restore it on close, leaving the page unable to scroll.
+let scrollLocks = 0;
+let bodyOverflow = '';
+
+function lockBodyScroll() {
+  if (scrollLocks === 0) {
+    bodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+  scrollLocks += 1;
+  return () => {
+    scrollLocks -= 1;
+    if (scrollLocks === 0) document.body.style.overflow = bodyOverflow;
+  };
+}
+
 export default function Modal({ open, onClose, title, description, children, footer, wide }) {
   const ref = useRef(null);
   const didFocusRef = useRef(false);
@@ -14,8 +31,6 @@ export default function Modal({ open, onClose, title, description, children, foo
     }
     const onKey = (e) => e.key === 'Escape' && onClose();
     document.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     // Only steal focus once on open, and only if no input/select/textarea is already focused
     if (!didFocusRef.current) {
       didFocusRef.current = true;
@@ -27,9 +42,10 @@ export default function Modal({ open, onClose, title, description, children, foo
     }
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
     };
   }, [open, onClose]);
+
+  useEffect(() => (open ? lockBodyScroll() : undefined), [open]);
 
   return (
     <AnimatePresence>

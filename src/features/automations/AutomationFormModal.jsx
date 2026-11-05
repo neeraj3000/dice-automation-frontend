@@ -5,7 +5,10 @@ import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Field';
 import { Chip } from '../../components/ui/Misc';
+import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/format';
+import { useGetResumesQuery } from '../resumes/resumesApi';
+import { describeProfileResumes } from '../boards/profileResumes';
 import { useCreateAutomationMutation, useUpdateAutomationMutation } from './automationsApi';
 import {
   DEFAULT_APPLY,
@@ -43,6 +46,11 @@ export default function AutomationFormModal({ open, onClose, automation, profile
   const [form, setForm] = useState(emptyForm);
   const [createAutomation, { isLoading: creating }] = useCreateAutomationMutation();
   const [updateAutomation, { isLoading: updating }] = useUpdateAutomationMutation();
+  const { data: resumes } = useGetResumesQuery();
+
+  const selectedProfiles = form.profileIds
+    .map((id) => profiles.find((p) => p.id === id))
+    .filter(Boolean);
 
   useEffect(() => {
     if (open) setForm(toForm(automation));
@@ -135,6 +143,24 @@ export default function AutomationFormModal({ open, onClose, automation, profile
               </Link>
               .
             </p>
+          )}
+          {selectedProfiles.length > 0 && (
+            <ul className="mt-3 space-y-1 rounded-control bg-paper-sunken/60 p-3 text-xs" aria-label="Resumes each profile applies with">
+              {selectedProfiles.map((p) => {
+                const info = describeProfileResumes(p, resumes);
+                return (
+                  <li key={p.id} className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 truncate font-medium text-ink">{p.name}</span>
+                    <span
+                      title={info.names.join(', ') || undefined}
+                      className={cn('min-w-0 truncate text-right text-ink-soft', info.allMissing && 'font-medium text-rust')}
+                    >
+                      {info.text}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
 

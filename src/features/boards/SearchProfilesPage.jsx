@@ -30,6 +30,11 @@ import {
   useRunSearchProfileMutation,
   useUpdateSearchProfileMutation,
 } from './searchProfilesApi';
+import { useGetResumesQuery } from '../resumes/resumesApi';
+import ResumePreviewModal from '../resumes/ResumePreviewModal';
+import ProfileResumeList from './ProfileResumeList';
+import ResumePicker from './ResumePicker';
+import { useProfileResumeUpload } from './useProfileResumeUpload';
 
 const WORK_SETTINGS_OPTIONS = ['Remote', 'Hybrid', 'On-Site'];
 const POSTED_OPTIONS = [
@@ -64,7 +69,7 @@ function Stat({ label, value }) {
   );
 }
 
-function ProfileCard({ p, running, onRun, onOpenDice, onEdit, onDelete }) {
+function ProfileCard({ p, resumes, running, onRun, onOpenDice, onEdit, onDelete, onPreviewResume }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const keywords = keywordList(p);
   const work = p.work_settings || ['Remote'];
@@ -144,6 +149,8 @@ function ProfileCard({ p, running, onRun, onOpenDice, onEdit, onDelete }) {
             />
           </div>
         </div>
+
+        <ProfileResumeList profile={p} resumes={resumes} onPreview={onPreviewResume} onEdit={onEdit} />
       </Card>
     </motion.div>
   );
@@ -155,12 +162,20 @@ export default function SearchProfilesPage() {
   const [updateProfile, { isLoading: updating }] = useUpdateSearchProfileMutation();
   const [deleteProfile] = useDeleteSearchProfileMutation();
   const [runProfile] = useRunSearchProfileMutation();
+  // Same cache entry as the app shell, so this normally costs no extra request
+  const {
+    data: resumes,
+    isLoading: resumesLoading,
+    isError: resumesError,
+    refetch: refetchResumes,
+  } = useGetResumesQuery();
 
   const formId = useId();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState(null);
   const [runningId, setRunningId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [previewResume, setPreviewResume] = useState(null);
 
   // Form State — single object to minimise re-renders and focus disruption
   const DEFAULTS = {
@@ -172,9 +187,16 @@ export default function SearchProfilesPage() {
     employmentTypes: ['FULLTIME', 'CONTRACTS'],
     postedWithin: 'ONE',
     easyApplyOnly: true,
+    resumeIds: [],
   };
   const [form, setForm] = useState(DEFAULTS);
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  // Added to whatever is selected by then: an upload can take a while, and picking goes on meanwhile
+  const resumeUpload = useProfileResumeUpload({
+    resumes: resumes || [],
+    refetch: refetchResumes,
+    onAdd: (ids) => setForm((prev) => ({ ...prev, resumeIds: [...new Set([...prev.resumeIds, ...ids])] })),
+  });
   const toggleArray = (key, item) =>
     setForm((prev) => ({
       ...prev,
@@ -192,6 +214,7 @@ export default function SearchProfilesPage() {
   }, [profiles]);
 
   const handleOpenDialog = (p = null) => {
+    resumeUpload.clearDuplicates();
     if (p) {
       setEditingProfile(p);
       setForm({
@@ -203,6 +226,7 @@ export default function SearchProfilesPage() {
         employmentTypes: p.employment_types || ['FULLTIME', 'CONTRACTS'],
         postedWithin: p.posted_within || 'ONE',
         easyApplyOnly: p.easy_apply_only !== false,
+        resumeIds: p.resume_ids || [],
       });
     } else {
       setEditingProfile(null);
@@ -236,6 +260,8 @@ export default function SearchProfilesPage() {
       posted_within: form.postedWithin,
       easy_apply_only: form.easyApplyOnly,
       is_remote: form.workSettings.includes('Remote'),
+      // Drop resumes deleted since they were selected. Until the library is known, send as is.
+      resume_ids: resumes ? form.resumeIds.filter((id) => resumes.some((r) => r.id === id)) : form.resumeIds,
     };
 
     try {
@@ -365,11 +391,13 @@ export default function SearchProfilesPage() {
               <ProfileCard
                 key={p.id}
                 p={p}
+                resumes={resumes}
                 running={runningId === p.id}
                 onRun={() => handleRun(p)}
                 onOpenDice={() => openOnDice(p)}
                 onEdit={() => handleOpenDialog(p)}
                 onDelete={() => setConfirmDelete(p)}
+                onPreviewResume={setPreviewResume}
               />
             ))}
           </AnimatePresence>
@@ -379,16 +407,17 @@ export default function SearchProfilesPage() {
       {/* Create / Edit Dialog */}
       <Modal
         open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
+        // Escape reaches every open modal; a preview on top must not close the form underneath
+        onClose={() => !previewResume && setDialogOpen(false)}
         wide
         title={editingProfile ? 'Edit search profile' : 'New search profile'}
-        description="Choose what to search for, where, and which Dice filters to apply."
+        description="Choose what to search for, where, which Dice filters to apply, and which resumes to use."
         footer={
           <>
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" form={formId} loading={creating || updating}>
+            <Button type="submit" form={formId} loading={creating || updating} disabled={resumeUpload.uploading}>
               {editingProfile ? 'Save changes' : 'Create profile'}
             </Button>
           </>
@@ -492,6 +521,20 @@ export default function SearchProfilesPage() {
             </div>
           </div>
 
+          <ResumePicker
+            resumes={resumes || []}
+            isLoading={resumesLoading}
+            isError={resumesError}
+            onRetry={refetchResumes}
+            selectedIds={form.resumeIds}
+            onChange={(ids) => setField('resumeIds', ids)}
+            onPreview={setPreviewResume}
+            onUpload={resumeUpload.uploadFiles}
+            uploading={resumeUpload.uploading}
+            duplicates={resumeUpload.duplicates}
+            onDismissDuplicates={resumeUpload.clearDuplicates}
+          />
+
           {/* Easy Apply */}
           <div className="rounded-control border border-line bg-paper-sunken/60 p-4">
             <Toggle
@@ -507,6 +550,8 @@ export default function SearchProfilesPage() {
           </div>
         </form>
       </Modal>
+
+      <ResumePreviewModal resume={previewResume} onClose={() => setPreviewResume(null)} />
 
       {/* Delete Confirmation Modal */}
       <Modal

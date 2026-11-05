@@ -1,5 +1,4 @@
 import { api } from '../../app/api';
-import { PLAN_LIMIT_STATUS } from '../billing/billingUtils';
 
 const LOCAL_STORAGE_KEY = 'a2h_search_profiles';
 
@@ -23,6 +22,13 @@ export const removeLocalProfile = (id) => {
   const updated = current.filter((p) => p.id !== id);
   localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
   return updated;
+};
+
+// The server answered and said no (plan limit, stale resume, ...): nothing to keep offline.
+// Only unreachable-server failures, which carry no HTTP 4xx status, fall back to local storage.
+const isRejectedByServer = (err) => {
+  const status = err?.error?.status;
+  return typeof status === 'number' && status < 500;
 };
 
 export const searchProfilesApi = api.injectEndpoints({
@@ -49,8 +55,7 @@ export const searchProfilesApi = api.injectEndpoints({
           const { data } = await queryFulfilled;
           saveLocalProfile(data);
         } catch (err) {
-          // A plan-limit rejection must not be saved as an offline local profile
-          if (err?.error?.status === PLAN_LIMIT_STATUS) return;
+          if (isRejectedByServer(err)) return;
           saveLocalProfile({
             ...arg,
             id: `local_${Date.now()}`,
@@ -70,7 +75,8 @@ export const searchProfilesApi = api.injectEndpoints({
         try {
           const { data } = await queryFulfilled;
           saveLocalProfile(data);
-        } catch {
+        } catch (err) {
+          if (isRejectedByServer(err)) return;
           saveLocalProfile({ id, ...body, updated_at: new Date().toISOString() });
         }
       },
