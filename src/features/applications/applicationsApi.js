@@ -82,6 +82,15 @@ export const applicationsApi = api.injectEndpoints({
       query: (id) => `/applications/external/${id}/history`,
       providesTags: (result, error, id) => [{ type: 'Application', id: `${id}-history` }],
     }),
+    /** Removes unapplied jobs older than the given number of hours (default 72). */
+    purgeStaleJobs: b.mutation({
+      query: (olderThanHours = 72) => ({
+        url: `/jobs/purge-stale?older_than_hours=${olderThanHours}`,
+        method: 'DELETE',
+      }),
+      // Invalidate Job list so the UI reflects the deletions immediately
+      invalidatesTags: ['Job'],
+    }),
   }),
 });
 
@@ -96,4 +105,5 @@ export const {
   useTrackExternalApplicationMutation,
   useUpdateExternalApplicationMutation,
   useGetExternalApplicationHistoryQuery,
+  usePurgeStaleJobsMutation,
 } = applicationsApi;

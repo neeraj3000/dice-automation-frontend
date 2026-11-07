@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import {
   Briefcase,
+  CalendarDays,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock,
   ExternalLink,
   FileText,
   Loader2,
@@ -28,7 +30,7 @@ import Badge from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import { PageHeader, Skeleton } from '../../components/ui/Misc';
 import { cn } from '../../lib/cn';
-import { errorMessage } from '../../lib/format';
+import { errorMessage, formatExactDate, timeAgo } from '../../lib/format';
 import { useDebounce } from '../../hooks/useDebounce';
 import {
   jobsApi,
@@ -85,7 +87,16 @@ function JobStatus({ job, score }) {
       </div>
     );
   }
-  return <Badge tone="neutral">{score !== null ? 'Matched' : 'New'}</Badge>;
+  if (job.status === 'LOW_MATCH' || (score !== null && score < 70)) {
+    return (
+      <div className="min-w-0" title="Resume match is below 70%. Skipped during automated applications.">
+        <Badge tone="rust" dot>
+          Low match
+        </Badge>
+      </div>
+    );
+  }
+  return <Badge tone={score !== null ? 'signal' : 'neutral'}>{score !== null ? 'Matched' : 'New'}</Badge>;
 }
 
 function MatchCell({ score, resumeName }) {
@@ -111,6 +122,43 @@ function MatchCell({ score, resumeName }) {
   );
 }
 
+function JobTimestampPill({ icon: Icon, label, value, tooltipTitle, tooltipDetail, tone = 'neutral' }) {
+  const isSignal = tone === 'signal';
+  return (
+    <div className="group/tip relative inline-flex">
+      <span
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium transition-all duration-150 cursor-default select-none border',
+          isSignal
+            ? 'border-signal/25 bg-signal-soft/40 text-signal-deep hover:border-signal/50 hover:bg-signal-soft/70'
+            : 'border-line-strong/60 bg-paper-sunken/80 text-ink-soft hover:border-line-strong hover:bg-paper-sunken hover:text-ink'
+        )}
+      >
+        <Icon className={cn('size-3 shrink-0', isSignal ? 'text-signal' : 'text-ink-disabled')} />
+        <span>
+          {label}: <strong className="font-semibold text-ink">{value}</strong>
+        </span>
+      </span>
+
+      {/* Sleek Custom Floating Tooltip */}
+      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 hidden group-hover/tip:flex flex-col items-center">
+        <div className="flex flex-col gap-0.5 rounded-lg border border-slate-700/80 bg-slate-900 px-2.5 py-1.5 text-center text-xs text-white shadow-xl whitespace-nowrap">
+          <p className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-white">
+            <Icon className={cn('size-3 shrink-0', isSignal ? 'text-emerald-400' : 'text-sky-400')} />
+            {tooltipTitle}
+          </p>
+          {tooltipDetail && (
+            <p className="text-[10px] text-slate-300 font-normal">
+              {tooltipDetail}
+            </p>
+          )}
+        </div>
+        <div className="-mt-1 size-2 rotate-45 border-b border-r border-slate-700/80 bg-slate-900" />
+      </div>
+    </div>
+  );
+}
+
 function JobRow({ job, resumes, busy, onApply, onView, isLocallyApplied }) {
   const score = jobScore(job);
   const resumeName =
@@ -122,7 +170,9 @@ function JobRow({ job, resumes, busy, onApply, onView, isLocallyApplied }) {
   const listingUrl = job.url || job.job_url;
   const company = job.company || 'Company not listed';
   const location = job.location || 'Remote';
-  const extras = [job.employment_type, job.salary, job.posted_date].filter(Boolean);
+  const extras = [job.employment_type, job.salary].filter(Boolean);
+  const fetchedAgo = job.created_at ? timeAgo(job.created_at) : null;
+  const fetchedExact = job.created_at ? formatExactDate(job.created_at) : null;
 
   return (
     <li className={cn(ROW_GRID, 'grid gap-4 px-5 py-4 transition-colors hover:bg-paper-sunken/40')}>
@@ -144,7 +194,7 @@ function JobRow({ job, resumes, busy, onApply, onView, isLocallyApplied }) {
             {job.title}
           </button>
           <p className="mt-0.5 truncate text-sm text-ink-soft">{company}</p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-soft">
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-soft">
             <span className="inline-flex items-center gap-1">
               <MapPin className="size-3.5" />
               {location}
@@ -156,10 +206,34 @@ function JobRow({ job, resumes, busy, onApply, onView, isLocallyApplied }) {
               <span className="rounded-full border border-line px-2 py-px text-[11px]">{job.work_setting}</span>
             )}
             {job.is_easy_apply && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-signal/25 px-2 py-px text-[11px] text-signal">
+              <span className="inline-flex items-center gap-1 rounded-full border border-signal/25 px-2 py-px text-[11px] text-signal font-medium">
                 <Zap className="size-3" />
                 Easy Apply
               </span>
+            )}
+          </div>
+
+          {/* Timestamps: Posted (Dice) & Fetched (Automation) */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+            {job.posted_date && (
+              <JobTimestampPill
+                icon={CalendarDays}
+                label="Posted"
+                value={job.posted_date}
+                tooltipTitle="Original Dice Posting"
+                tooltipDetail={`Dice listed this job as "${job.posted_date}"`}
+                tone="neutral"
+              />
+            )}
+            {fetchedAgo && (
+              <JobTimestampPill
+                icon={Clock}
+                label="Fetched"
+                value={fetchedAgo}
+                tooltipTitle="Scraped by Automation"
+                tooltipDetail={fetchedExact ? `Saved to workspace on ${fetchedExact}` : `Scraped ${fetchedAgo}`}
+                tone="signal"
+              />
             )}
           </div>
         </div>
@@ -268,7 +342,13 @@ export default function JobsPage() {
   });
   const abortBatchRef = useRef(false);
 
-  const jobsList = data?.items || [];
+  const rawItems = data?.items || [];
+  const jobsList = rawItems.filter((j) => {
+    if (j.status === "LOW_MATCH") return false;
+    const s = jobScore(j);
+    if (s !== null && s < 70) return false;
+    return true;
+  });
   const totalCount = data?.total || jobsList.length || 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
@@ -432,7 +512,13 @@ export default function JobsPage() {
   };
 
   // Batch Apply All (Current Page)
-  const unappliedOnPage = jobsList.filter((j) => j.status !== 'APPLIED' && !appliedJobIds.has(j.id));
+  const unappliedOnPage = jobsList.filter((j) => {
+    if (j.status === 'APPLIED' || appliedJobIds.has(j.id)) return false;
+    if (j.status === 'LOW_MATCH') return false;
+    const s = jobScore(j);
+    if (s !== null && s < 70) return false;
+    return true;
+  });
   const appliedJobsCount = jobsList.filter((j) => j.status === 'APPLIED' || appliedJobIds.has(j.id)).length;
 
   const handleApplyAll = async () => {
@@ -851,6 +937,30 @@ export default function JobsPage() {
           }
         >
           <div className="space-y-5">
+            {/* Timestamp Information Banner */}
+            <div className="flex flex-wrap items-center gap-2.5 rounded-control border border-line bg-paper-sunken/60 px-3.5 py-2 text-xs">
+              {selectedJob.posted_date && (
+                <JobTimestampPill
+                  icon={CalendarDays}
+                  label="Posted on Dice"
+                  value={selectedJob.posted_date}
+                  tooltipTitle="Original Dice Posting"
+                  tooltipDetail={`Dice listed this job as "${selectedJob.posted_date}"`}
+                  tone="neutral"
+                />
+              )}
+              {selectedJob.created_at && (
+                <JobTimestampPill
+                  icon={Clock}
+                  label="Scraped / Fetched"
+                  value={timeAgo(selectedJob.created_at)}
+                  tooltipTitle="Scraped by Automation"
+                  tooltipDetail={`Saved to workspace on ${formatExactDate(selectedJob.created_at)}`}
+                  tone="signal"
+                />
+              )}
+            </div>
+
             {/* Match Breakdown Card */}
             {(selectedJob.match || selectedJob.match_result) && (
               <div className="rounded-control border border-line bg-paper-sunken p-4 space-y-3">

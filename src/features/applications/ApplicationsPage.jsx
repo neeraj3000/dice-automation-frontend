@@ -32,6 +32,7 @@ import {
   useRetryApplicationMutation,
   useStopApplicationMutation,
   useSubmitApplicationMutation,
+  usePurgeStaleJobsMutation,
 } from './applicationsApi';
 import { STATUS_META } from './statusMeta';
 import ReviewModal from './ReviewModal';
@@ -261,6 +262,7 @@ export default function ApplicationsPage() {
     refetchOnMountOrArgChange: 30, // Only re-fetch if data is older than 30 seconds
   });
   const [submitApp, { isLoading: submitting }] = useSubmitApplicationMutation();
+  const [purgeStaleJobs, { isLoading: purging }] = usePurgeStaleJobsMutation();
 
   const [filter, setFilter] = useState('ALL');
   const [boardFilter, setBoardFilter] = useState('ALL');
@@ -306,6 +308,21 @@ export default function ApplicationsPage() {
     }
   };
 
+  const handlePurgeStaleJobs = async () => {
+    try {
+      const result = await purgeStaleJobs(72).unwrap();
+      const deleted = result?.deleted ?? 0;
+      if (deleted > 0) {
+        toast.success(`Removed ${deleted} stale job listing(s) older than 72 hours.`);
+        refetch();
+      } else {
+        toast.success('No stale jobs found — your queue is clean!');
+      }
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+
   return (
     <div className="space-y-6 min-w-0 overflow-x-hidden">
       <PageHeader
@@ -327,6 +344,15 @@ export default function ApplicationsPage() {
               onClick={() => refetch()}
             >
               Refresh
+            </Button>
+            <Button
+              variant="ghost"
+              icon={Square}
+              loading={purging}
+              onClick={handlePurgeStaleJobs}
+              title="Remove unapplied job listings older than 72 hours that Dice no longer accepts"
+            >
+              Clear Stale Jobs
             </Button>
             <Button variant="secondary" icon={Compass} onClick={() => navigate('/jobs')}>
               Jobs Explorer

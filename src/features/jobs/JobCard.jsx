@@ -1,9 +1,11 @@
 import { memo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, ExternalLink, MapPin, Sparkles, Trash2, Users, Wallet } from 'lucide-react';
+import { ChevronDown, ExternalLink, MapPin, Sparkles, Trash2, Users, Wallet, CalendarDays, Clock, Download } from 'lucide-react';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { cn } from '../../lib/cn';
+import { timeAgo, formatExactDate } from '../../lib/format';
 
 function MatchBar({ score }) {
   const tone = score >= 70 ? 'bg-signal' : score >= 40 ? 'bg-amber' : 'bg-rust';
@@ -13,6 +15,79 @@ function MatchBar({ score }) {
         <motion.div className={`h-full ${tone}`} initial={{ width: 0 }} animate={{ width: `${score}%` }} />
       </div>
       <span className="text-xs font-medium tabular-nums">{score}% match</span>
+    </div>
+  );
+}
+
+/**
+ * Dual timestamp display: Job Posted date (from Dice) + Fetched date (when we scraped it).
+ * Hovering shows the exact date/time as a native tooltip.
+ */
+function JobTimestampPill({ icon: Icon, label, value, tooltipTitle, tooltipDetail, tone = 'neutral' }) {
+  const isSignal = tone === 'signal';
+  return (
+    <div className="group/tip relative inline-flex">
+      <span
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium transition-all duration-150 cursor-default select-none border',
+          isSignal
+            ? 'border-signal/25 bg-signal-soft/40 text-signal-deep hover:border-signal/50 hover:bg-signal-soft/70'
+            : 'border-line-strong/60 bg-paper-sunken/80 text-ink-soft hover:border-line-strong hover:bg-paper-sunken hover:text-ink'
+        )}
+      >
+        <Icon className={cn('size-3 shrink-0', isSignal ? 'text-signal' : 'text-ink-disabled')} />
+        <span>
+          {label}: <strong className="font-semibold text-ink">{value}</strong>
+        </span>
+      </span>
+
+      {/* Sleek Custom Floating Tooltip */}
+      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 hidden group-hover/tip:flex flex-col items-center">
+        <div className="flex flex-col gap-0.5 rounded-lg border border-slate-700/80 bg-slate-900 px-2.5 py-1.5 text-center text-xs text-white shadow-xl whitespace-nowrap">
+          <p className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-white">
+            <Icon className={cn('size-3 shrink-0', isSignal ? 'text-emerald-400' : 'text-sky-400')} />
+            {tooltipTitle}
+          </p>
+          {tooltipDetail && (
+            <p className="text-[10px] text-slate-300 font-normal">
+              {tooltipDetail}
+            </p>
+          )}
+        </div>
+        <div className="-mt-1 size-2 rotate-45 border-b border-r border-slate-700/80 bg-slate-900" />
+      </div>
+    </div>
+  );
+}
+
+function JobTimestamps({ postedDate, fetchedAt }) {
+  const fetchedAgo = fetchedAt ? timeAgo(fetchedAt) : null;
+  const fetchedExact = fetchedAt ? formatExactDate(fetchedAt) : null;
+
+  if (!postedDate && !fetchedAgo) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      {postedDate && (
+        <JobTimestampPill
+          icon={CalendarDays}
+          label="Posted"
+          value={postedDate}
+          tooltipTitle="Original Dice Posting"
+          tooltipDetail={`Dice listed this job as "${postedDate}"`}
+          tone="neutral"
+        />
+      )}
+      {fetchedAgo && (
+        <JobTimestampPill
+          icon={Clock}
+          label="Fetched"
+          value={fetchedAgo}
+          tooltipTitle="Scraped by Automation"
+          tooltipDetail={fetchedExact ? `Saved to workspace on ${fetchedExact}` : `Scraped ${fetchedAgo}`}
+          tone="signal"
+        />
+      )}
     </div>
   );
 }
@@ -40,6 +115,8 @@ function JobCard({ job, onApply, onMatch, onDelete, matching }) {
             </a>
             <p className="text-sm text-ink-soft">{job.company || 'Company not listed'}</p>
           </div>
+
+          {/* Location / Salary row */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-ink-soft">
             {job.location && (
               <span className="inline-flex items-center gap-1"><MapPin className="size-3.5" />{job.location}</span>
@@ -47,14 +124,22 @@ function JobCard({ job, onApply, onMatch, onDelete, matching }) {
             {job.salary && (
               <span className="inline-flex items-center gap-1"><Wallet className="size-3.5" />{job.salary}</span>
             )}
-            {job.posted_date && <span>{job.posted_date}</span>}
           </div>
+
+          {/* Timestamps row — Posted (Dice) + Fetched (our system) */}
+          <JobTimestamps postedDate={job.posted_date} fetchedAt={job.created_at} />
+
+          {/* Badges row */}
           <div className="flex flex-wrap items-center gap-1.5">
             {job.is_easy_apply && <Badge tone="signal">Easy Apply</Badge>}
             {job.work_setting && <Badge>{job.work_setting}</Badge>}
             {job.employment_type && <Badge>{job.employment_type}</Badge>}
             {applied && <Badge tone="signal" dot>Applied</Badge>}
+            {!applied && (job.status === "LOW_MATCH" || (m?.score !== undefined && m?.score !== null && m.score < 70)) && (
+              <Badge tone="rust" dot>Low match (&lt;70%)</Badge>
+            )}
           </div>
+
           {m && (
             <div className="space-y-1.5 pt-1">
               <div className="flex items-center gap-2">
