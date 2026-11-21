@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import Navbar from './Navbar';
 import Hero from './Hero';
 import ProductShowcase from './ProductShowcase';
@@ -10,6 +11,17 @@ import CtaSection from './CtaSection';
 import Footer from './Footer';
 
 export default function HomePage() {
+  const { hash } = useLocation();
+
+  // Arriving from another page via /#section: scroll to that section
+  useEffect(() => {
+    if (!hash) return;
+    const t = setTimeout(() => {
+      document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+    return () => clearTimeout(t);
+  }, [hash]);
+
   useEffect(() => {
     const originalTitle = document.title;
     document.title = 'Apply2Hire – Autonomous Career Intelligence & Application Automation';

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Settings,
   LogOut,
+  Headset,
 } from 'lucide-react';
 import { Logo } from '../../components/ui/Misc';
 import { useTheme } from '../../hooks/useTheme';
@@ -29,6 +30,9 @@ export default function Navbar() {
   const user = useSelector((s) => s.auth.user);
   const shouldReduceMotion = useReducedMotion();
   const [logout] = useLogoutMutation();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const onSupport = location.pathname === '/support';
 
   // Safely fetch profile only when user is authenticated
   const { data: profile } = useGetProfileQuery(undefined, { skip: !user });
@@ -74,6 +78,10 @@ export default function Navbar() {
   const handleNavClick = (e, href) => {
     e.preventDefault();
     setMobileMenuOpen(false);
+    if (location.pathname !== '/') {
+      navigate(`/${href}`);
+      return;
+    }
     const element = document.querySelector(href);
     if (element) {
       element.scrollIntoView({ behavior: shouldReduceMotion ? 'auto' : 'smooth' });
@@ -82,17 +90,17 @@ export default function Navbar() {
 
   return (
     <header className="fixed top-4 sm:top-6 inset-x-0 z-50 px-4 pointer-events-none">
-      <div className="max-w-6xl mx-auto pointer-events-auto">
+      <div className="max-w-6xl xl:max-w-7xl mx-auto pointer-events-auto">
         {/* Floating Pill Container */}
         <div
-          className={`flex items-center justify-between px-4 sm:px-6 py-2.5 sm:py-3 rounded-full transition-all duration-300 ${
+          className={`flex items-center justify-between gap-4 px-4 sm:px-6 py-2.5 sm:py-3 rounded-full transition-all duration-300 ${
             scrolled
               ? 'bg-white/95 dark:bg-stone-900/95 backdrop-blur-md border border-stone-200/90 dark:border-stone-800 shadow-[0_8px_30px_rgb(0,0,0,0.08)]'
               : 'bg-white/85 dark:bg-stone-900/85 backdrop-blur-md border border-stone-200/70 dark:border-stone-800/80 shadow-[0_4px_20px_rgb(0,0,0,0.04)]'
           }`}
         >
           {/* Brand Logo & Wordmark + AI Tag */}
-          <div className="flex items-center">
+          <div className="flex shrink-0 items-center">
             <Link
               to="/"
               className="inline-flex items-center gap-2 rounded-full focus-visible:outline-2 focus-visible:outline-signal transition-opacity hover:opacity-95"
@@ -111,13 +119,13 @@ export default function Navbar() {
           </div>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center gap-6 xl:gap-7" aria-label="Public Navigation">
+          <nav className="hidden xl:flex flex-1 items-center justify-center gap-6 2xl:gap-8" aria-label="Public Navigation">
             {navLinks.map((link) => (
               <a
                 key={link.label}
                 href={link.href}
                 onClick={(e) => handleNavClick(e, link.href)}
-                className="text-xs lg:text-sm font-medium text-stone-600 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white transition-colors"
+                className="whitespace-nowrap text-sm font-medium text-stone-600 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white transition-colors"
               >
                 {link.label}
               </a>
@@ -125,7 +133,20 @@ export default function Navbar() {
           </nav>
 
           {/* Desktop Actions */}
-          <div className="hidden md:flex items-center gap-2.5">
+          <div className="hidden md:flex shrink-0 items-center gap-2.5">
+            <Link
+              to="/support"
+              aria-label="Contact support"
+              title="Contact support"
+              aria-current={onSupport ? 'page' : undefined}
+              className={`grid size-8 place-items-center rounded-full border transition ${
+                onSupport
+                  ? 'border-[#104e43]/30 bg-[#eef4f0] text-[#104e43] dark:border-emerald-800/60 dark:bg-emerald-950/60 dark:text-emerald-300'
+                  : 'border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-950'
+              }`}
+            >
+              <Headset className="size-4" />
+            </Link>
             <button
               type="button"
               onClick={toggle}
@@ -140,10 +161,10 @@ export default function Navbar() {
               <div className="flex items-center gap-2.5">
                 <Link
                   to="/dashboard"
-                  className="inline-flex items-center gap-1.5 rounded-full bg-[#104e43] hover:bg-[#0c3d34] px-4 sm:px-5 py-2 text-xs sm:text-sm font-medium text-white shadow-sm hover:shadow transition-all"
+                  className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[#104e43] hover:bg-[#0c3d34] px-4 py-2 text-sm font-medium text-white shadow-sm hover:shadow transition-all"
                 >
                   <LayoutDashboard className="size-4" />
-                  <span>Go to Dashboard</span>
+                  <span>Dashboard</span>
                 </Link>
 
                 <div className="h-5 w-px bg-stone-300 dark:bg-stone-700 mx-0.5" />
@@ -170,7 +191,7 @@ export default function Navbar() {
                         {displayName?.[0]?.toUpperCase() || 'U'}
                       </span>
                     )}
-                    <span className="max-w-[90px] lg:max-w-[130px] truncate">{displayName}</span>
+                    <span className="max-w-[110px] truncate">{displayName}</span>
                     <ChevronDown
                       className={`size-3.5 text-stone-500 transition-transform duration-150 ${
                         profileMenuOpen ? 'rotate-180' : ''
@@ -231,23 +252,41 @@ export default function Navbar() {
               <div className="flex items-center gap-2 sm:gap-2.5">
                 <Link
                   to="/login"
-                  className="inline-flex items-center justify-center px-4 sm:px-5 py-2 text-xs sm:text-sm font-medium rounded-full border border-stone-300/80 dark:border-stone-700 bg-stone-50/60 dark:bg-stone-800/60 text-stone-800 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-950 dark:hover:text-white hover:border-stone-400 dark:hover:border-stone-600 transition-all duration-150 focus-visible:outline-2 focus-visible:outline-[#104e43]"
+                  className="inline-flex items-center justify-center whitespace-nowrap px-4 sm:px-5 py-2 text-xs sm:text-sm font-medium rounded-full border border-stone-300/80 dark:border-stone-700 bg-stone-50/60 dark:bg-stone-800/60 text-stone-800 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-950 dark:hover:text-white hover:border-stone-400 dark:hover:border-stone-600 transition-all duration-150 focus-visible:outline-2 focus-visible:outline-[#104e43]"
                 >
                   Sign In
                 </Link>
                 <Link
                   to="/login"
-                  className="inline-flex items-center gap-1.5 rounded-full bg-[#104e43] hover:bg-[#0c3d34] px-4 sm:px-5 py-2 text-xs sm:text-sm font-medium text-white shadow-sm hover:shadow transition-all duration-150 focus-visible:outline-2 focus-visible:outline-[#104e43]"
+                  className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[#104e43] hover:bg-[#0c3d34] px-4 sm:px-5 py-2 text-xs sm:text-sm font-medium text-white shadow-sm hover:shadow transition-all duration-150 focus-visible:outline-2 focus-visible:outline-[#104e43]"
                 >
                   <span>Start Applying</span>
                   <ArrowRight className="size-3.5" />
                 </Link>
               </div>
             )}
+
+            {/* Section links live in the menu until there is room for them inline */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="xl:hidden grid size-8 place-items-center rounded-full border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200 transition hover:bg-stone-100 dark:hover:bg-stone-800"
+              aria-expanded={mobileMenuOpen}
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            >
+              {mobileMenuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+            </button>
           </div>
 
           {/* Mobile Toggle Buttons */}
           <div className="flex items-center gap-2 md:hidden">
+            <Link
+              to="/support"
+              aria-label="Contact support"
+              className="grid size-8 place-items-center rounded-full border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 transition hover:bg-stone-100 dark:hover:bg-stone-800"
+            >
+              <Headset className="size-3.5" />
+            </Link>
             <button
               type="button"
               onClick={toggle}
@@ -289,7 +328,15 @@ export default function Navbar() {
                     {link.label}
                   </a>
                 ))}
-                <div className="pt-3 mt-1 border-t border-stone-200 dark:border-stone-800 flex flex-col gap-2.5">
+                <Link
+                  to="/support"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                >
+                  <Headset className="size-4 text-stone-500" />
+                  <span>Contact Support</span>
+                </Link>
+                <div className="md:hidden pt-3 mt-1 border-t border-stone-200 dark:border-stone-800 flex flex-col gap-2.5">
                   {user ? (
                     <>
                       {/* Mobile Profile Card */}

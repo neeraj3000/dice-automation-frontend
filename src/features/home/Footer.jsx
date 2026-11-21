@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Logo } from '../../components/ui/Misc';
-import { Settings, HelpCircle, Building2, Globe, Mail, MapPin, ArrowUp } from 'lucide-react';
+import { Settings, HelpCircle, Building2, Globe, Mail, MapPin, ArrowUp, Headset } from 'lucide-react';
 
 function LinkedinIcon({ className = 'size-4' }) {
   return (
@@ -76,14 +76,19 @@ export default function Footer() {
             </div>
             <ul className="space-y-3 text-sm">
               <li>
-                <a href="#features" className="hover:text-stone-900 dark:hover:text-white transition-colors">
+                <Link to="/#features" className="hover:text-stone-900 dark:hover:text-white transition-colors">
                   Core Features
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#faq" className="hover:text-stone-900 dark:hover:text-white transition-colors">
+                <Link to="/#faq" className="hover:text-stone-900 dark:hover:text-white transition-colors">
                   Frequently Asked Questions
-                </a>
+                </Link>
+              </li>
+              <li>
+                <Link to="/support" className="hover:text-stone-900 dark:hover:text-white transition-colors">
+                  Support &amp; Contact
+                </Link>
               </li>
               <li>
                 <Link to="/login" className="hover:text-stone-900 dark:hover:text-white transition-colors">
@@ -106,12 +111,21 @@ export default function Footer() {
             </div>
             <ul className="space-y-3 text-sm">
               <li>
+                <Link
+                  to="/support"
+                  className="flex items-center gap-2 hover:text-stone-900 dark:hover:text-white transition-colors"
+                >
+                  <Headset className="size-4 text-stone-500" />
+                  <span>Contact Support</span>
+                </Link>
+              </li>
+              <li>
                 <a
-                  href="mailto:support@apply2hire.ai"
+                  href="mailto:support@apply2hire.com"
                   className="flex items-center gap-2 hover:text-stone-900 dark:hover:text-white transition-colors"
                 >
                   <Mail className="size-4 text-stone-500" />
-                  <span>support@apply2hire.ai</span>
+                  <span>support@apply2hire.com</span>
                 </a>
               </li>
               <li className="flex items-center gap-2 text-stone-600 dark:text-stone-400">
@@ -154,6 +168,10 @@ export default function Footer() {
             <span className="text-stone-300 dark:text-stone-700">|</span>
             <Link to="/login" className="hover:text-stone-900 dark:hover:text-white transition-colors">
               Terms of Service
+            </Link>
+            <span className="text-stone-300 dark:text-stone-700">|</span>
+            <Link to="/support" className="hover:text-stone-900 dark:hover:text-white transition-colors">
+              Support
             </Link>
             <span className="text-stone-300 dark:text-stone-700">|</span>
             <span>Version 1.0.4</span>

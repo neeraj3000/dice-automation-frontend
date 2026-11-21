@@ -1,4 +1,4 @@
-import { lazy, useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { Toaster } from 'react-hot-toast';
@@ -21,6 +21,7 @@ const ApplicationsPage = lazy(() => import('./features/applications/Applications
 const ReviewQueuePage = lazy(() => import('./features/review/ReviewQueuePage'));
 const SettingsPage = lazy(() => import('./features/settings/SettingsPage'));
 const BillingPage = lazy(() => import('./features/billing/BillingPage'));
+const SupportPage = lazy(() => import('./features/support/SupportPage'));
 
 export default function App() {
   const [refresh] = useRefreshMutation();
@@ -48,6 +49,14 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/support"
+          element={
+            <Suspense fallback={<div className="min-h-screen bg-[#faf7f2] dark:bg-[#0c100e]" />}>
+              <SupportPage />
+            </Suspense>
+          }
+        />
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
             <Route path="dashboard" element={<DashboardPage />} />

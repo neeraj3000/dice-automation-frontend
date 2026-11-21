@@ -206,7 +206,9 @@ export function DiceProvider({ children }) {
     };
     let hadError = false;
     try {
-      eventSource = new EventSource(SSE_URL);
+      // withCredentials sends the httpOnly a2h_refresh cookie cross-origin (EventSource can't set an
+      // Authorization header); without it the backend answers 401 and the stream never opens.
+      eventSource = new EventSource(SSE_URL, { withCredentials: true });
 
       eventSource.onopen = () => {
         setDbStatus('connected');
